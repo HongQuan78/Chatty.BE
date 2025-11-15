@@ -1,0 +1,49 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+out/
+artifacts/
+[Pp]ublish/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+_ReSharper*/
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+*.nuspec
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Coverage / profiling
+*.gcov
+*.coverage
+*.coveragexml
+*.vsp
+*.vspx
+*.psess
+
+# Logs / diagnostics
+*.log
+TestResult*/
+[Tt]est[Rr]esult*/
+
+# User secrets / generated config
+appsettings.*.Development.json
+secrets.json
+
+# OS junk
+.DS_Store
+Thumbs.db
