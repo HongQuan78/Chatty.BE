@@ -129,13 +129,19 @@ sequenceDiagram
 | Variable | Description | Default |
 | --- | --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | Hosting environment flag controlling Swagger/UI and configuration binding. | `Development` |
-| `ConnectionStrings__DefaultConnection` | SQL Server connection string consumed by `ChatDbContext`. | Provided in `appsettings.Development.json` |
+| `DEFAULT_CONNECTION` | SQL Server connection string consumed by `ChatDbContext`. | Defined in the local `.env` file |
 | `Logging__LogLevel__*` | Standard ASP.NET Core logging knobs. | See `appsettings*.json` |
 
 ### Secrets & Connection Strings
-1. Copy `Chatty.BE.API/appsettings.Development.json` and adjust the `ConnectionStrings.DefaultConnection` entry for your SQL Server instance, or override via environment variable (`ConnectionStrings__DefaultConnection`).
-2. For production, **do not** store connection strings in source. Use `dotnet user-secrets`, Azure Key Vault, or container secrets depending on hosting.
-3. Ensure the SQL Server user has rights to create the `ChattyDb` database if you plan to run migrations locally.
+1. Create a `.env` file at the repository root (a template is shown below) and set `DEFAULT_CONNECTION` to your SQL Server instance.
+2. The API bootstrapper loads the `.env` file automatically via `DotNetEnv` and forwards the value to `ConnectionStrings:DefaultConnection`.
+3. For production, **do not** store connection strings in source. Use platform-managed secrets (Key Vault, AWS Secrets Manager, etc.).
+4. Ensure the SQL Server user has rights to create the `ChattyDb` database if you plan to run migrations locally.
+
+Example `.env`:
+```bash
+DEFAULT_CONNECTION="Server=localhost\\SQLEXPRESS;Database=ChattyDb;Trusted_Connection=True;TrustServerCertificate=True;"
+```
 
 ## Local Development
 

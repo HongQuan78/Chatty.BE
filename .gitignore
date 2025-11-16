@@ -43,6 +43,7 @@ TestResult*/
 # User secrets / generated config
 appsettings.*.Development.json
 secrets.json
+.env
 
 # OS junk
 .DS_Store

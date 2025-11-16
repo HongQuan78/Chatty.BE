@@ -1,7 +1,21 @@
 using Chatty.BE.Infrastructure.DependencyInjection;
 using Chatty.BE.Infrastructure.SignalR;
+using DotNetEnv;
+using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var envFilePath = Path.Combine(builder.Environment.ContentRootPath, ".env");
+if (File.Exists(envFilePath))
+{
+    Env.Load(envFilePath);
+}
+
+var defaultConnection = Environment.GetEnvironmentVariable("DEFAULT_CONNECTION");
+if (!string.IsNullOrWhiteSpace(defaultConnection))
+{
+    builder.Configuration["ConnectionStrings:DefaultConnection"] = defaultConnection;
+}
 
 // Add services
 builder.Services.AddInfrastructure(builder.Configuration);
