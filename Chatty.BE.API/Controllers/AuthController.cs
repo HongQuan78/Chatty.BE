@@ -64,4 +64,22 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 
         return NoContent();
     }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> LogoutAsync(
+        [FromBody] LogoutRequest request,
+        CancellationToken ct
+    )
+    {
+        await _authService.LogoutAsync(
+            request.UserId,
+            request.RefreshToken,
+            HttpContext.GetClientIp(),
+            ct
+        );
+
+        return NoContent();
+    }
 }
