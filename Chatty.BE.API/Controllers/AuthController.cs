@@ -20,32 +20,16 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         CancellationToken ct
     )
     {
-        try
-        {
-            var user = await _authService.RegisterAsync(
-                request.UserName,
-                request.Email,
-                request.Password,
-                ct
-            );
+        var user = await _authService.RegisterAsync(
+            request.UserName,
+            request.Email,
+            request.Password,
+            ct
+        );
 
-            var response = new RegisterResponse(
-                user.Id,
-                user.UserName,
-                user.Email,
-                user.DisplayName
-            );
+        var response = new RegisterResponse(user.Id, user.UserName, user.Email, user.DisplayName);
 
-            return Ok(response);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        return Ok(response);
     }
 
     [HttpPost("login")]
@@ -57,19 +41,8 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         CancellationToken ct
     )
     {
-        try
-        {
-            var response = await _authService.LoginAsync(request, GetRequestIp(), ct);
-            return Ok(response);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var response = await _authService.LoginAsync(request, GetRequestIp(), ct);
+        return Ok(response);
     }
 
     [HttpPost("change-password")]
@@ -81,29 +54,14 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         CancellationToken ct
     )
     {
-        try
-        {
-            await _authService.ChangePasswordAsync(
-                request.UserId,
-                request.CurrentPassword,
-                request.NewPassword,
-                ct
-            );
+        await _authService.ChangePasswordAsync(
+            request.UserId,
+            request.CurrentPassword,
+            request.NewPassword,
+            ct
+        );
 
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { message = "User not found." });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        return NoContent();
     }
 
     private string GetRequestIp()

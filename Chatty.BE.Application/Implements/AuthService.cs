@@ -1,4 +1,6 @@
+using System.Net;
 using Chatty.BE.Application.DTOs.Auth;
+using Chatty.BE.Application.Exceptions;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
@@ -37,12 +39,12 @@ public class AuthService(
 
         if (await _userRepository.IsEmailTakenAsync(normalizedEmail, ct))
         {
-            throw new InvalidOperationException("Email is already in use.");
+            throw new AppException(HttpStatusCode.Conflict, "Email is already in use.");
         }
 
         if (await _userRepository.IsUserNameTakenAsync(normalizedUserName, ct))
         {
-            throw new InvalidOperationException("Username is already in use.");
+            throw new AppException(HttpStatusCode.Conflict, "Username is already in use.");
         }
 
         var utcNow = _dateTimeProvider.UtcNow;
@@ -76,11 +78,11 @@ public class AuthService(
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user =
             await _userRepository.GetByEmailAsync(normalizedEmail, ct)
-            ?? throw new InvalidOperationException("Invalid credentials.");
+            ?? throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
 
         if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
-            throw new InvalidOperationException("Invalid credentials.");
+            throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
         }
 
         var response = await IssueTokensAsync(user, ipAddress, ct);
@@ -100,7 +102,7 @@ public class AuthService(
         var hashedToken = _tokenProvider.ComputeHash(request.RefreshToken);
         var storedToken =
             await _refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct)
-            ?? throw new InvalidOperationException("Refresh token is not recognized.");
+            ?? throw new AppException(HttpStatusCode.BadRequest, "Refresh token is not recognized.");
 
         if (storedToken.RevokedAt.HasValue)
         {
@@ -110,7 +112,7 @@ public class AuthService(
                 ipAddress,
                 ct
             );
-            throw new InvalidOperationException("Refresh token has been revoked.");
+            throw new AppException(HttpStatusCode.BadRequest, "Refresh token has been revoked.");
         }
 
         var utcNow = _dateTimeProvider.UtcNow;
@@ -121,12 +123,12 @@ public class AuthService(
             storedToken.RevokedByIp = ipAddress;
             _refreshTokenRepository.Update(storedToken);
             await _unitOfWork.SaveChangesAsync(ct);
-            throw new InvalidOperationException("Refresh token expired.");
+            throw new AppException(HttpStatusCode.BadRequest, "Refresh token expired.");
         }
 
         var user =
             await _userRepository.GetByIdAsync(storedToken.UserId, ct)
-            ?? throw new InvalidOperationException("User not found for refresh token.");
+            ?? throw new AppException(HttpStatusCode.NotFound, "User not found for refresh token.");
 
         var accessToken = _tokenProvider.GenerateAccessToken(user);
         var newRefreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
@@ -219,7 +221,7 @@ public class AuthService(
 
         if (!_passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
         {
-            throw new InvalidOperationException("Current password is incorrect.");
+            throw new AppException(HttpStatusCode.BadRequest, "Current password is incorrect.");
         }
 
         user.PasswordHash = _passwordHasher.HashPassword(newPassword);
