@@ -1,4 +1,5 @@
 using Chatty.BE.Application.DTOs.Auth;
+using Chatty.BE.Application.Exceptions;
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
@@ -132,7 +133,7 @@ public class AuthServiceTests
         var service = CreateService();
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<AppException>(() =>
             service.LoginAsync(new LoginRequestDto("user@example.com", "wrong"), "127.0.0.1")
         );
     }
