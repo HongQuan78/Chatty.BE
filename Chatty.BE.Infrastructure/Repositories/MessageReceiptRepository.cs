@@ -1,4 +1,4 @@
-using Chatty.BE.Application.Interfaces;
+using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Domain.Enums;
 using Chatty.BE.Infrastructure.Persistence;

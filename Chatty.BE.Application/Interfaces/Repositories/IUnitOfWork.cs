@@ -1,4 +1,4 @@
-namespace Chatty.BE.Application.Interfaces;
+namespace Chatty.BE.Application.Interfaces.Repositories;
 
 public interface IUnitOfWork : IDisposable
 {

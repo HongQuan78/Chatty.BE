@@ -1,6 +1,6 @@
 using Chatty.BE.Domain.Entities;
 
-namespace Chatty.BE.Application.Interfaces
+namespace Chatty.BE.Application.Interfaces.Repositories
 {
     public interface IMessageRepository : IGenericRepository<Message>
     {

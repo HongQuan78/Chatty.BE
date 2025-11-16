@@ -1,4 +1,4 @@
-using Chatty.BE.Application.Interfaces;
+using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore.Storage;
 

@@ -1,4 +1,5 @@
 using Chatty.BE.Infrastructure.DependencyInjection;
+using Chatty.BE.Infrastructure.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,9 +7,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
 
-// builder.Services.AddSignalR();
-
+builder.Services.AddSignalR();
 var app = builder.Build();
+
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.MapControllers();
 

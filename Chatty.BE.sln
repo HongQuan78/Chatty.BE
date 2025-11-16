@@ -11,9 +11,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Domain", "Chatty.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Infrastructure", "Chatty.BE.Infrastructure\Chatty.BE.Infrastructure.csproj", "{127890D1-2F8B-4D78-9178-CCE5516967A3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Infrastructure.Tests", "Chatty.BE.Infrastructure.Tests\Chatty.BE.Infrastructure.Tests.csproj", "{11E31423-FFAB-4B3B-85FA-F3818184B0C1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Infrastructure.Tests", "Tests\Chatty.BE.Infrastructure.Tests\Chatty.BE.Infrastructure.Tests.csproj", "{11E31423-FFAB-4B3B-85FA-F3818184B0C1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Domain.Tests", "Chatty.BE.Domain.Tests\Chatty.BE.Domain.Tests.csproj", "{1454341C-69B7-465F-9F3A-3FE809696994}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Domain.Tests", "Tests\Chatty.BE.Domain.Tests\Chatty.BE.Domain.Tests.csproj", "{1454341C-69B7-465F-9F3A-3FE809696994}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Application.Test", "Tests\Chatty.BE.Application.Test\Chatty.BE.Application.Test.csproj", "{36F6E18D-F414-4A87-BC6E-92294C828600}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -97,8 +101,23 @@ Global
 		{1454341C-69B7-465F-9F3A-3FE809696994}.Release|x64.Build.0 = Release|Any CPU
 		{1454341C-69B7-465F-9F3A-3FE809696994}.Release|x86.ActiveCfg = Release|Any CPU
 		{1454341C-69B7-465F-9F3A-3FE809696994}.Release|x86.Build.0 = Release|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Debug|x64.Build.0 = Debug|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Debug|x86.Build.0 = Debug|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Release|x64.ActiveCfg = Release|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Release|x64.Build.0 = Release|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Release|x86.ActiveCfg = Release|Any CPU
+		{36F6E18D-F414-4A87-BC6E-92294C828600}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{36F6E18D-F414-4A87-BC6E-92294C828600} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
