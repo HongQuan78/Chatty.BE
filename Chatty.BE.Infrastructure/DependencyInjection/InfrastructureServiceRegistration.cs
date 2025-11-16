@@ -84,19 +84,47 @@ public static class InfrastructureServiceRegistration
             );
         }
 
+        var issuer =
+            Environment.GetEnvironmentVariable("JWT_ISSUER")
+            ?? configuration["Jwt:Issuer"]
+            ?? "Chatty.BE";
+
+        var audience =
+            Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+            ?? configuration["Jwt:Audience"]
+            ?? "Chatty.BE.Clients";
+
+        var envAccessMinutes = Environment.GetEnvironmentVariable("JWT_EXPIRATION_MINUTES");
+        var accessSecondsFromMinutes =
+            int.TryParse(envAccessMinutes, out var minutes) && minutes > 0
+                ? minutes * 60
+                : (int?)null;
+
+        var envRefreshDays = Environment.GetEnvironmentVariable("JWT_REFRESH_DAYS");
+        var refreshSecondsFromDays =
+            int.TryParse(envRefreshDays, out var days) && days > 0
+                ? days * 60 * 60 * 24
+                : (int?)null;
+
         return new JwtOptions
         {
-            Issuer = configuration["Jwt:Issuer"] ?? "Chatty.BE",
-            Audience = configuration["Jwt:Audience"] ?? "Chatty.BE.Clients",
+            Issuer = issuer,
+            Audience = audience,
             AccessTokenLifetime = TimeSpan.FromSeconds(
-                ResolveDuration("ACCESS_TOKEN_EXP_SECONDS", configuration["Jwt:AccessTokenSeconds"], 900)
+                accessSecondsFromMinutes
+                    ?? ResolveDuration(
+                        "ACCESS_TOKEN_EXP_SECONDS",
+                        configuration["Jwt:AccessTokenSeconds"],
+                        900
+                    )
             ),
             RefreshTokenLifetime = TimeSpan.FromSeconds(
-                ResolveDuration(
-                    "REFRESH_TOKEN_EXP_SECONDS",
-                    configuration["Jwt:RefreshTokenSeconds"],
-                    60 * 60 * 24 * 30
-                )
+                refreshSecondsFromDays
+                    ?? ResolveDuration(
+                        "REFRESH_TOKEN_EXP_SECONDS",
+                        configuration["Jwt:RefreshTokenSeconds"],
+                        60 * 60 * 24 * 30
+                    )
             ),
             PrivateKey = privateKey,
             PublicKey = Environment.GetEnvironmentVariable("JWT_PUBLIC_KEY"),
