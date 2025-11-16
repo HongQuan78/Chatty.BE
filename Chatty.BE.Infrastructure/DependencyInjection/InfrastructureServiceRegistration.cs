@@ -11,7 +11,8 @@ public static class InfrastructureServiceRegistration
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration
+    )
     {
         // DbContext
         var connectionString = configuration.GetConnectionString("DefaultConnection");
@@ -22,6 +23,12 @@ public static class InfrastructureServiceRegistration
         });
 
         // Repositories & UnitOfWork
+        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+        services.AddScoped<IConversationRepository, ConversationRepository>();
+        services.AddScoped<IConversationParticipantRepository, ConversationParticipantRepository>();
+        services.AddScoped<IMessageRepository, MessageRepository>();
+        services.AddScoped<IMessageAttachmentRepository, MessageAttachmentRepository>();
+        services.AddScoped<IMessageReceiptRepository, MessageReceiptRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 

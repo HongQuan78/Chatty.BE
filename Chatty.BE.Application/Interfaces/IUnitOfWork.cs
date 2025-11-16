@@ -1,6 +1,12 @@
 namespace Chatty.BE.Application.Interfaces;
 
-public interface IUnitOfWork
+public interface IUnitOfWork : IDisposable
 {
     Task<int> SaveChangesAsync(CancellationToken ct = default);
+
+    Task BeginTransactionAsync(CancellationToken ct = default);
+
+    Task CommitAsync(CancellationToken ct = default);
+
+    Task RollbackAsync(CancellationToken ct = default);
 }

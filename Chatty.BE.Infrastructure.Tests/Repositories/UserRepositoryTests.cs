@@ -1,7 +1,6 @@
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Infrastructure.Repositories;
 using Chatty.BE.Infrastructure.Tests.Common;
-using Xunit;
 
 namespace Chatty.BE.Infrastructure.Tests.Repositories;
 

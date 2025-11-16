@@ -1,7 +1,5 @@
-﻿using System;
-using Chatty.BE.Domain.Entities;
+﻿using Chatty.BE.Domain.Entities;
 using Chatty.BE.Domain.Enums;
-using Xunit;
 
 namespace Chatty.BE.Domain.Tests.Entities
 {
@@ -20,7 +18,7 @@ namespace Chatty.BE.Domain.Tests.Entities
                 Type = MessageType.Text,
                 Status = MessageStatus.Sent,
                 CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
+                IsDeleted = false,
             };
 
             // Assert
