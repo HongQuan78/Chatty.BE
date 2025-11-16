@@ -1,4 +1,5 @@
 using Chatty.BE.API.Contracts.Auth;
+using Chatty.BE.API.Extensions;
 using Chatty.BE.Application.DTOs.Auth;
 using Chatty.BE.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -41,7 +42,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         CancellationToken ct
     )
     {
-        var response = await _authService.LoginAsync(request, GetRequestIp(), ct);
+        var response = await _authService.LoginAsync(request, HttpContext.GetClientIp(), ct);
         return Ok(response);
     }
 
@@ -62,10 +63,5 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         );
 
         return NoContent();
-    }
-
-    private string GetRequestIp()
-    {
-        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 }

@@ -102,7 +102,10 @@ public class AuthService(
         var hashedToken = _tokenProvider.ComputeHash(request.RefreshToken);
         var storedToken =
             await _refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct)
-            ?? throw new AppException(HttpStatusCode.BadRequest, "Refresh token is not recognized.");
+            ?? throw new AppException(
+                HttpStatusCode.BadRequest,
+                "Refresh token is not recognized."
+            );
 
         if (storedToken.RevokedAt.HasValue)
         {
