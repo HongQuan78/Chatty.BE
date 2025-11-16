@@ -12,6 +12,7 @@ namespace Chatty.BE.Infrastructure.Persistence
         public DbSet<Message> Messages => Set<Message>();
         public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
         public DbSet<MessageReceipt> MessageReceipts => Set<MessageReceipt>();
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -22,6 +23,7 @@ namespace Chatty.BE.Infrastructure.Persistence
             modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
             modelBuilder.Entity<Conversation>().HasQueryFilter(c => !c.IsDeleted);
             modelBuilder.Entity<Message>().HasQueryFilter(m => !m.IsDeleted);
+            modelBuilder.Entity<RefreshToken>().HasQueryFilter(t => !t.IsDeleted);
 
             base.OnModelCreating(modelBuilder);
         }

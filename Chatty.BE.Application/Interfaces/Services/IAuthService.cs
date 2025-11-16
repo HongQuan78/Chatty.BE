@@ -1,12 +1,10 @@
+using Chatty.BE.Application.DTOs.Auth;
 using Chatty.BE.Domain.Entities;
 
 namespace Chatty.BE.Application.Interfaces.Services;
 
 public interface IAuthService
 {
-    /// <summary>
-    /// Đăng ký user mới. Ném exception hoặc trả false nếu email/username đã tồn tại.
-    /// </summary>
     Task<User> RegisterAsync(
         string userName,
         string email,
@@ -14,19 +12,27 @@ public interface IAuthService
         CancellationToken ct = default
     );
 
-    /// <summary>
-    /// Đăng nhập bằng email hoặc username + password.
-    /// Trả về user + accessToken (JWT) hoặc ném exception nếu sai.
-    /// </summary>
-    Task<(User user, string accessToken)> LoginAsync(
-        string userNameOrEmail,
-        string password,
+    Task<LoginResponseDto> LoginAsync(
+        LoginRequestDto request,
+        string ipAddress,
         CancellationToken ct = default
     );
 
-    /// <summary>
-    /// Đổi mật khẩu hiện tại.
-    /// </summary>
+    Task<RefreshTokenResponseDto> RefreshAsync(
+        RefreshTokenRequestDto request,
+        string ipAddress,
+        CancellationToken ct = default
+    );
+
+    Task LogoutAsync(
+        Guid userId,
+        string refreshToken,
+        string? ipAddress = null,
+        CancellationToken ct = default
+    );
+
+    Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(Guid userId, CancellationToken ct = default);
+
     Task ChangePasswordAsync(
         Guid userId,
         string currentPassword,

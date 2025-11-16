@@ -36,5 +36,9 @@ namespace Chatty.BE.Domain.Entities
         // Navigation: per-message receipts (delivered/read)
         public virtual ICollection<MessageReceipt> MessageReceipts { get; set; } =
             new HashSet<MessageReceipt>();
+
+        // Navigation: refresh tokens / sessions
+        public virtual ICollection<RefreshToken> RefreshTokens { get; set; } =
+            new HashSet<RefreshToken>();
     }
 }

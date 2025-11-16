@@ -1,14 +1,24 @@
-using System.Security.Cryptography;
-using System.Text;
+using Chatty.BE.Application.DTOs.Auth;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
 
 namespace Chatty.BE.Application.Implements;
 
-public class AuthService(IUserRepository userRepository, IUnitOfWork unitOfWork) : IAuthService
+public class AuthService(
+    IUserRepository userRepository,
+    IRefreshTokenRepository refreshTokenRepository,
+    IPasswordHasher passwordHasher,
+    ITokenProvider tokenProvider,
+    IDateTimeProvider dateTimeProvider,
+    IUnitOfWork unitOfWork
+) : IAuthService
 {
     private readonly IUserRepository _userRepository = userRepository;
+    private readonly IRefreshTokenRepository _refreshTokenRepository = refreshTokenRepository;
+    private readonly IPasswordHasher _passwordHasher = passwordHasher;
+    private readonly ITokenProvider _tokenProvider = tokenProvider;
+    private readonly IDateTimeProvider _dateTimeProvider = dateTimeProvider;
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
 
     public async Task<User> RegisterAsync(
@@ -35,13 +45,13 @@ public class AuthService(IUserRepository userRepository, IUnitOfWork unitOfWork)
             throw new InvalidOperationException("Username is already in use.");
         }
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = _dateTimeProvider.UtcNow;
         var user = new User
         {
             Id = Guid.NewGuid(),
             UserName = normalizedUserName,
             Email = normalizedEmail,
-            PasswordHash = HashPassword(password),
+            PasswordHash = _passwordHasher.HashPassword(password),
             CreatedAt = utcNow,
             UpdatedAt = null,
             IsDeleted = false,
@@ -53,30 +63,144 @@ public class AuthService(IUserRepository userRepository, IUnitOfWork unitOfWork)
         return user;
     }
 
-    public async Task<(User user, string accessToken)> LoginAsync(
-        string userNameOrEmail,
-        string password,
+    public async Task<LoginResponseDto> LoginAsync(
+        LoginRequestDto request,
+        string ipAddress,
         CancellationToken ct = default
     )
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userNameOrEmail);
-        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Password);
 
-        User? user = null;
-        if (userNameOrEmail.Contains('@', StringComparison.Ordinal))
-        {
-            user = await _userRepository.GetByEmailAsync(userNameOrEmail.Trim(), ct);
-        }
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var user =
+            await _userRepository.GetByEmailAsync(normalizedEmail, ct)
+            ?? throw new InvalidOperationException("Invalid credentials.");
 
-        user ??= await _userRepository.GetByUserNameAsync(userNameOrEmail.Trim(), ct);
-
-        if (user is null || !VerifyPassword(password, user.PasswordHash))
+        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
             throw new InvalidOperationException("Invalid credentials.");
         }
 
-        var accessToken = GenerateAccessToken(user);
-        return (user, accessToken);
+        var response = await IssueTokensAsync(user, ipAddress, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return response;
+    }
+
+    public async Task<RefreshTokenResponseDto> RefreshAsync(
+        RefreshTokenRequestDto request,
+        string ipAddress,
+        CancellationToken ct = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.RefreshToken);
+
+        var hashedToken = _tokenProvider.ComputeHash(request.RefreshToken);
+        var storedToken =
+            await _refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct)
+            ?? throw new InvalidOperationException("Refresh token is not recognized.");
+
+        if (storedToken.RevokedAt.HasValue)
+        {
+            await RevokeAllSessionsAsync(
+                storedToken.UserId,
+                "Refresh token reuse detected",
+                ipAddress,
+                ct
+            );
+            throw new InvalidOperationException("Refresh token has been revoked.");
+        }
+
+        var utcNow = _dateTimeProvider.UtcNow;
+        if (storedToken.ExpiresAt <= utcNow)
+        {
+            storedToken.RevokedAt = utcNow;
+            storedToken.ReasonRevoked = "Token expired";
+            storedToken.RevokedByIp = ipAddress;
+            _refreshTokenRepository.Update(storedToken);
+            await _unitOfWork.SaveChangesAsync(ct);
+            throw new InvalidOperationException("Refresh token expired.");
+        }
+
+        var user =
+            await _userRepository.GetByIdAsync(storedToken.UserId, ct)
+            ?? throw new InvalidOperationException("User not found for refresh token.");
+
+        var accessToken = _tokenProvider.GenerateAccessToken(user);
+        var newRefreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
+
+        storedToken.RevokedAt = utcNow;
+        storedToken.ReasonRevoked = "Replaced by new token";
+        storedToken.RevokedByIp = ipAddress;
+        storedToken.ReplacedByTokenId = newRefreshToken.Entity.Id;
+
+        _refreshTokenRepository.Update(storedToken);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return new RefreshTokenResponseDto(
+            accessToken.Token,
+            CalculateSeconds(accessToken.ExpiresAt),
+            newRefreshToken.Token,
+            CalculateSeconds(newRefreshToken.Entity.ExpiresAt)
+        );
+    }
+
+    public async Task LogoutAsync(
+        Guid userId,
+        string refreshToken,
+        string? ipAddress,
+        CancellationToken ct = default
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
+
+        var hashedToken = _tokenProvider.ComputeHash(refreshToken);
+        var storedToken = await _refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct);
+
+        if (storedToken is null || storedToken.UserId != userId)
+        {
+            return;
+        }
+
+        if (storedToken.RevokedAt is not null)
+        {
+            return;
+        }
+
+        storedToken.RevokedAt = _dateTimeProvider.UtcNow;
+        storedToken.ReasonRevoked = "User logout";
+        storedToken.RevokedByIp = ipAddress;
+
+        _refreshTokenRepository.Update(storedToken);
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(
+        Guid userId,
+        CancellationToken ct = default
+    )
+    {
+        var tokens = await _refreshTokenRepository.GetTokensByUserIdAsync(
+            userId,
+            includeRevoked: false,
+            ct
+        );
+
+        var utcNow = _dateTimeProvider.UtcNow;
+        return tokens
+            .OrderByDescending(t => t.CreatedAt)
+            .Where(t => t.ExpiresAt > utcNow)
+            .Select(t => new SessionDto(
+                t.Id,
+                t.CreatedAt,
+                t.ExpiresAt,
+                t.CreatedByIp,
+                t.RevokedAt.HasValue,
+                t.IsReusedToken
+            ))
+            .ToList();
     }
 
     public async Task ChangePasswordAsync(
@@ -93,56 +217,95 @@ public class AuthService(IUserRepository userRepository, IUnitOfWork unitOfWork)
             await _userRepository.GetByIdAsync(userId, ct)
             ?? throw new KeyNotFoundException("User not found.");
 
-        if (!VerifyPassword(currentPassword, user.PasswordHash))
+        if (!_passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
         {
             throw new InvalidOperationException("Current password is incorrect.");
         }
 
-        user.PasswordHash = HashPassword(newPassword);
-        user.UpdatedAt = DateTime.UtcNow;
+        user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+        user.UpdatedAt = _dateTimeProvider.UtcNow;
 
         _userRepository.Update(user);
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    private static string HashPassword(string password)
+    private async Task<LoginResponseDto> IssueTokensAsync(
+        User user,
+        string ipAddress,
+        CancellationToken ct
+    )
     {
-        var salt = RandomNumberGenerator.GetBytes(16);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(
-            Encoding.UTF8.GetBytes(password),
-            salt,
-            100_000,
-            HashAlgorithmName.SHA256,
-            32
-        );
+        var accessToken = _tokenProvider.GenerateAccessToken(user);
+        var refreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
 
-        return $"{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
+        return new LoginResponseDto(
+            user.Id,
+            accessToken.Token,
+            CalculateSeconds(accessToken.ExpiresAt),
+            refreshToken.Token,
+            CalculateSeconds(refreshToken.Entity.ExpiresAt)
+        );
     }
 
-    private static bool VerifyPassword(string password, string hashString)
+    private async Task<(RefreshToken Entity, string Token)> CreateRefreshTokenAsync(
+        Guid userId,
+        string? ipAddress,
+        CancellationToken ct
+    )
     {
-        var parts = hashString.Split('.', 2);
-        if (parts.Length != 2)
+        var refreshTokenResult = _tokenProvider.GenerateRefreshToken(userId);
+        var utcNow = _dateTimeProvider.UtcNow;
+        var entity = new RefreshToken
         {
-            return false;
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TokenHash = _tokenProvider.ComputeHash(refreshTokenResult.Token),
+            ExpiresAt = refreshTokenResult.ExpiresAt,
+            CreatedAt = utcNow,
+            UpdatedAt = null,
+            IsDeleted = false,
+            CreatedByIp = ipAddress,
+        };
+
+        await _refreshTokenRepository.AddAsync(entity, ct);
+
+        return (entity, refreshTokenResult.Token);
+    }
+
+    private async Task RevokeAllSessionsAsync(
+        Guid userId,
+        string reason,
+        string? ipAddress,
+        CancellationToken ct
+    )
+    {
+        var tokens = await _refreshTokenRepository.GetTokensByUserIdAsync(
+            userId,
+            includeRevoked: true,
+            ct
+        );
+
+        var utcNow = _dateTimeProvider.UtcNow;
+        foreach (var token in tokens.Where(t => !t.RevokedAt.HasValue))
+        {
+            token.RevokedAt = utcNow;
+            token.ReasonRevoked = reason;
+            token.RevokedByIp = ipAddress;
+            token.IsReusedToken = true;
         }
 
-        var salt = Convert.FromBase64String(parts[0]);
-        var storedHash = Convert.FromBase64String(parts[1]);
-        var computedHash = Rfc2898DeriveBytes.Pbkdf2(
-            Encoding.UTF8.GetBytes(password),
-            salt,
-            100_000,
-            HashAlgorithmName.SHA256,
-            storedHash.Length
-        );
+        if (tokens.Count == 0)
+        {
+            return;
+        }
 
-        return CryptographicOperations.FixedTimeEquals(storedHash, computedHash);
+        _refreshTokenRepository.UpdateRange(tokens);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    private static string GenerateAccessToken(User user)
+    private int CalculateSeconds(DateTime expiresAt)
     {
-        var tokenBytes = RandomNumberGenerator.GetBytes(32);
-        return Convert.ToBase64String(tokenBytes);
+        var seconds = (int)(expiresAt - _dateTimeProvider.UtcNow).TotalSeconds;
+        return seconds > 0 ? seconds : 0;
     }
 }

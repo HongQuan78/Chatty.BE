@@ -1,0 +1,113 @@
+using Chatty.BE.API.Contracts.Auth;
+using Chatty.BE.Application.DTOs.Auth;
+using Chatty.BE.Application.Interfaces.Services;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Chatty.BE.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class AuthController(IAuthService authService) : ControllerBase
+{
+    private readonly IAuthService _authService = authService;
+
+    [HttpPost("register")]
+    [ProducesResponseType(typeof(RegisterResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<RegisterResponse>> RegisterAsync(
+        [FromBody] RegisterRequest request,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            var user = await _authService.RegisterAsync(
+                request.UserName,
+                request.Email,
+                request.Password,
+                ct
+            );
+
+            var response = new RegisterResponse(
+                user.Id,
+                user.UserName,
+                user.Email,
+                user.DisplayName
+            );
+
+            return Ok(response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("login")]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<LoginResponseDto>> LoginAsync(
+        [FromBody] LoginRequestDto request,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            var response = await _authService.LoginAsync(request, GetRequestIp(), ct);
+            return Ok(response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("change-password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ChangePasswordAsync(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            await _authService.ChangePasswordAsync(
+                request.UserId,
+                request.CurrentPassword,
+                request.NewPassword,
+                ct
+            );
+
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "User not found." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private string GetRequestIp()
+    {
+        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    }
+}
