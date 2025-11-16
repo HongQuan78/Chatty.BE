@@ -2,7 +2,6 @@ using Chatty.BE.Infrastructure.DependencyInjection;
 using Chatty.BE.Infrastructure.SignalR;
 using DotNetEnv;
 using System.IO;
-
 var builder = WebApplication.CreateBuilder(args);
 
 var envFilePath = Path.Combine(builder.Environment.ContentRootPath, ".env");
