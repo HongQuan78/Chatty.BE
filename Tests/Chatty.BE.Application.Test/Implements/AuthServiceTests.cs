@@ -1,4 +1,5 @@
 using Chatty.BE.Application.DTOs.Auth;
+using Chatty.BE.Application.Exceptions;
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
@@ -56,8 +57,12 @@ public class AuthServiceTests
     public async Task RegisterAsync_ShouldPersistUser_WhenDataValid()
     {
         // Arrange
-        _userRepository.Setup(r => r.IsEmailTakenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        _userRepository.Setup(r => r.IsUserNameTakenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _userRepository
+            .Setup(r => r.IsEmailTakenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _userRepository
+            .Setup(r => r.IsUserNameTakenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
         var service = CreateService();
 
         // Act
@@ -67,7 +72,10 @@ public class AuthServiceTests
         Assert.Equal("alice", user.UserName.ToLowerInvariant());
         Assert.Equal("user@example.com", user.Email);
         _passwordHasher.Verify(p => p.HashPassword("P@ssw0rd!"), Times.Once);
-        _userRepository.Verify(r => r.AddAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Once);
+        _userRepository.Verify(
+            r => r.AddAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()),
+            Times.Once
+        );
         _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -83,19 +91,27 @@ public class AuthServiceTests
             PasswordHash = "secure",
         };
 
-        _userRepository.Setup(r => r.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>())).ReturnsAsync(storedUser);
+        _userRepository
+            .Setup(r => r.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(storedUser);
         _passwordHasher.Setup(p => p.VerifyPassword("correct", "secure")).Returns(true);
 
         var service = CreateService();
 
         // Act
-        var response = await service.LoginAsync(new LoginRequestDto("user@example.com", "correct"), "127.0.0.1");
+        var response = await service.LoginAsync(
+            new LoginRequestDto("user@example.com", "correct"),
+            "127.0.0.1"
+        );
 
         // Assert
         Assert.Equal(storedUser.Id, response.UserId);
         Assert.Equal("access-token", response.AccessToken);
         Assert.Equal("refresh-token", response.RefreshToken);
-        _refreshTokenRepository.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Once);
+        _refreshTokenRepository.Verify(
+            r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()),
+            Times.Once
+        );
         _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -103,13 +119,21 @@ public class AuthServiceTests
     public async Task LoginAsync_ShouldThrow_WhenPasswordInvalid()
     {
         // Arrange
-        var storedUser = new User { Id = Guid.NewGuid(), Email = "user@example.com", UserName = "alice", PasswordHash = "secure" };
-        _userRepository.Setup(r => r.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>())).ReturnsAsync(storedUser);
+        var storedUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "user@example.com",
+            UserName = "alice",
+            PasswordHash = "secure",
+        };
+        _userRepository
+            .Setup(r => r.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(storedUser);
         _passwordHasher.Setup(p => p.VerifyPassword("wrong", "secure")).Returns(false);
         var service = CreateService();
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<AppException>(() =>
             service.LoginAsync(new LoginRequestDto("user@example.com", "wrong"), "127.0.0.1")
         );
     }
@@ -119,7 +143,9 @@ public class AuthServiceTests
     {
         // Arrange
         var user = new User { Id = Guid.NewGuid(), PasswordHash = "hashed::old" };
-        _userRepository.Setup(r => r.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _userRepository
+            .Setup(r => r.GetByIdAsync(user.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
         _passwordHasher.Setup(p => p.VerifyPassword("old", "hashed::old")).Returns(true);
         _passwordHasher.Setup(p => p.HashPassword("new")).Returns("hashed::new");
         var service = CreateService();
