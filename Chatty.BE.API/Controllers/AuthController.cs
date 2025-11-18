@@ -2,6 +2,7 @@ using Chatty.BE.API.Contracts.Auth;
 using Chatty.BE.API.Extensions;
 using Chatty.BE.Application.DTOs.Auth;
 using Chatty.BE.Application.Interfaces.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Chatty.BE.API.Controllers;
@@ -81,5 +82,23 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         );
 
         return NoContent();
+    }
+
+    [HttpPost("refresh")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRefreshToken(
+        RefreshTokenRequestDto refreshTokenRequestDto,
+        CancellationToken ct
+    )
+    {
+        var response = await _authService.RefreshAsync(
+            refreshTokenRequestDto,
+            HttpContext.GetClientIp(),
+            ct
+        );
+
+        return Ok(response);
     }
 }
