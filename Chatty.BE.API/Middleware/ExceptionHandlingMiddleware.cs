@@ -44,7 +44,7 @@ public sealed class ExceptionHandlingMiddleware(
                 statusCode == (int)HttpStatusCode.InternalServerError
                     ? "Internal Server Error"
                     : "Request Failed",
-            Detail = exception.Message,
+            Detail = env.IsDevelopment() ? exception.Message : "An unexpected error occurred.",
             Status = statusCode,
             Instance = context.TraceIdentifier,
         };
