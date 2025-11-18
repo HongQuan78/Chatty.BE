@@ -84,7 +84,6 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return NoContent();
     }
 
-    [Authorize]
     [HttpPost("refresh")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
