@@ -7,11 +7,13 @@ namespace Chatty.BE.API.Middleware;
 
 public sealed class ExceptionHandlingMiddleware(
     RequestDelegate next,
-    ILogger<ExceptionHandlingMiddleware> logger
+    ILogger<ExceptionHandlingMiddleware> logger,
+    IHostEnvironment env
 )
 {
     private readonly RequestDelegate _next = next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger = logger;
+    private readonly IHostEnvironment _env = env;
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -40,11 +42,8 @@ public sealed class ExceptionHandlingMiddleware(
 
         var problem = new ProblemDetails
         {
-            Title =
-                statusCode == (int)HttpStatusCode.InternalServerError
-                    ? "Internal Server Error"
-                    : "Request Failed",
-            Detail = env.IsDevelopment() ? exception.Message : "An unexpected error occurred.",
+            Title = statusCode == 500 ? "Internal Server Error" : "Request Failed",
+            Detail = _env.IsDevelopment() ? exception.Message : "An unexpected error occurred.",
             Status = statusCode,
             Instance = context.TraceIdentifier,
         };
@@ -64,11 +63,11 @@ public sealed class ExceptionHandlingMiddleware(
 
         return exception switch
         {
-            ArgumentException => (int)HttpStatusCode.BadRequest,
-            InvalidOperationException => (int)HttpStatusCode.BadRequest,
-            KeyNotFoundException => (int)HttpStatusCode.NotFound,
-            UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
-            _ => (int)HttpStatusCode.InternalServerError,
+            ArgumentException => 400,
+            InvalidOperationException => 400,
+            KeyNotFoundException => 404,
+            UnauthorizedAccessException => 401,
+            _ => 500,
         };
     }
 }
