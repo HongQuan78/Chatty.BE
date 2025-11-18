@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using Chatty.BE.API.Config;
 using Chatty.BE.API.Middleware;
 using Chatty.BE.Infrastructure.DependencyInjection;
 using Chatty.BE.Infrastructure.SignalR;
@@ -23,6 +24,7 @@ if (!string.IsNullOrWhiteSpace(defaultConnection))
 
 // Add services
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSwaggerConfig();
 builder
     .Services.AddAuthentication("Bearer")
     .AddJwtBearer(
