@@ -17,7 +17,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     {
         Environment.SetEnvironmentVariable(
             "DEFAULT_CONNECTION",
-            "Server=localhost;Database=ChattyTests;Trusted_Connection=True;Encrypt=False;"
+            "Server=127.0.0.1,1433;Database=ChattyTests;User Id=sa;Password=Pass@word1;Encrypt=False;TrustServerCertificate=True;"
         );
         Environment.SetEnvironmentVariable("JWT_SECRET", "integration-test-secret-key-value");
         Environment.SetEnvironmentVariable("JWT_ISSUER", "Chatty.Tests");
