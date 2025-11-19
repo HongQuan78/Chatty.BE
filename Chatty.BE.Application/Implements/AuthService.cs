@@ -16,13 +16,6 @@ public class AuthService(
     IUnitOfWork unitOfWork
 ) : IAuthService
 {
-    private readonly IUserRepository _userRepository = userRepository;
-    private readonly IRefreshTokenRepository _refreshTokenRepository = refreshTokenRepository;
-    private readonly IPasswordHasher _passwordHasher = passwordHasher;
-    private readonly ITokenProvider _tokenProvider = tokenProvider;
-    private readonly IDateTimeProvider _dateTimeProvider = dateTimeProvider;
-    private readonly IUnitOfWork _unitOfWork = unitOfWork;
-
     public async Task<User> RegisterAsync(
         string userName,
         string email,
@@ -37,30 +30,30 @@ public class AuthService(
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var normalizedUserName = userName.Trim();
 
-        if (await _userRepository.IsEmailTakenAsync(normalizedEmail, ct))
+        if (await userRepository.IsEmailTakenAsync(normalizedEmail, ct))
         {
             throw new AppException(HttpStatusCode.Conflict, "Email is already in use.");
         }
 
-        if (await _userRepository.IsUserNameTakenAsync(normalizedUserName, ct))
+        if (await userRepository.IsUserNameTakenAsync(normalizedUserName, ct))
         {
             throw new AppException(HttpStatusCode.Conflict, "Username is already in use.");
         }
 
-        var utcNow = _dateTimeProvider.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         var user = new User
         {
             Id = Guid.NewGuid(),
             UserName = normalizedUserName,
             Email = normalizedEmail,
-            PasswordHash = _passwordHasher.HashPassword(password),
+            PasswordHash = passwordHasher.HashPassword(password),
             CreatedAt = utcNow,
             UpdatedAt = null,
             IsDeleted = false,
         };
 
-        await _userRepository.AddAsync(user, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await userRepository.AddAsync(user, ct);
+        await unitOfWork.SaveChangesAsync(ct);
 
         return user;
     }
@@ -77,16 +70,16 @@ public class AuthService(
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user =
-            await _userRepository.GetByEmailAsync(normalizedEmail, ct)
+            await userRepository.GetByEmailAsync(normalizedEmail, ct)
             ?? throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
 
-        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
+        if (!passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
             throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
         }
 
         var response = await IssueTokensAsync(user, ipAddress, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(ct);
         return response;
     }
 
@@ -99,9 +92,9 @@ public class AuthService(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RefreshToken);
 
-        var hashedToken = _tokenProvider.ComputeHash(request.RefreshToken);
+        var hashedToken = tokenProvider.ComputeHash(request.RefreshToken);
         var storedToken =
-            await _refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct)
+            await refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct)
             ?? throw new AppException(
                 HttpStatusCode.BadRequest,
                 "Refresh token is not recognized."
@@ -118,22 +111,22 @@ public class AuthService(
             throw new AppException(HttpStatusCode.BadRequest, "Refresh token has been revoked.");
         }
 
-        var utcNow = _dateTimeProvider.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         if (storedToken.ExpiresAt <= utcNow)
         {
             storedToken.RevokedAt = utcNow;
             storedToken.ReasonRevoked = "Token expired";
             storedToken.RevokedByIp = ipAddress;
-            _refreshTokenRepository.Update(storedToken);
-            await _unitOfWork.SaveChangesAsync(ct);
+            refreshTokenRepository.Update(storedToken);
+            await unitOfWork.SaveChangesAsync(ct);
             throw new AppException(HttpStatusCode.BadRequest, "Refresh token expired.");
         }
 
         var user =
-            await _userRepository.GetByIdAsync(storedToken.UserId, ct)
+            await userRepository.GetByIdAsync(storedToken.UserId, ct)
             ?? throw new AppException(HttpStatusCode.NotFound, "User not found for refresh token.");
 
-        var accessToken = _tokenProvider.GenerateAccessToken(user);
+        var accessToken = tokenProvider.GenerateAccessToken(user);
         var newRefreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
 
         storedToken.RevokedAt = utcNow;
@@ -141,8 +134,8 @@ public class AuthService(
         storedToken.RevokedByIp = ipAddress;
         storedToken.ReplacedByTokenId = newRefreshToken.Entity.Id;
 
-        _refreshTokenRepository.Update(storedToken);
-        await _unitOfWork.SaveChangesAsync(ct);
+        refreshTokenRepository.Update(storedToken);
+        await unitOfWork.SaveChangesAsync(ct);
 
         return new RefreshTokenResponseDto(
             accessToken.Token,
@@ -161,8 +154,8 @@ public class AuthService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
-        var hashedToken = _tokenProvider.ComputeHash(refreshToken);
-        var storedToken = await _refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct);
+        var hashedToken = tokenProvider.ComputeHash(refreshToken);
+        var storedToken = await refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct);
 
         if (storedToken is null || storedToken.UserId != userId)
         {
@@ -174,12 +167,12 @@ public class AuthService(
             return;
         }
 
-        storedToken.RevokedAt = _dateTimeProvider.UtcNow;
+        storedToken.RevokedAt = dateTimeProvider.UtcNow;
         storedToken.ReasonRevoked = "User logout";
         storedToken.RevokedByIp = ipAddress;
 
-        _refreshTokenRepository.Update(storedToken);
-        await _unitOfWork.SaveChangesAsync(ct);
+        refreshTokenRepository.Update(storedToken);
+        await unitOfWork.SaveChangesAsync(ct);
     }
 
     public async Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(
@@ -187,13 +180,13 @@ public class AuthService(
         CancellationToken ct = default
     )
     {
-        var tokens = await _refreshTokenRepository.GetTokensByUserIdAsync(
+        var tokens = await refreshTokenRepository.GetTokensByUserIdAsync(
             userId,
             includeRevoked: false,
             ct
         );
 
-        var utcNow = _dateTimeProvider.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         return tokens
             .OrderByDescending(t => t.CreatedAt)
             .Where(t => t.ExpiresAt > utcNow)
@@ -219,19 +212,19 @@ public class AuthService(
         ArgumentException.ThrowIfNullOrWhiteSpace(newPassword);
 
         var user =
-            await _userRepository.GetByIdAsync(userId, ct)
+            await userRepository.GetByIdAsync(userId, ct)
             ?? throw new KeyNotFoundException("User not found.");
 
-        if (!_passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
+        if (!passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
         {
             throw new AppException(HttpStatusCode.BadRequest, "Current password is incorrect.");
         }
 
-        user.PasswordHash = _passwordHasher.HashPassword(newPassword);
-        user.UpdatedAt = _dateTimeProvider.UtcNow;
+        user.PasswordHash = passwordHasher.HashPassword(newPassword);
+        user.UpdatedAt = dateTimeProvider.UtcNow;
 
-        _userRepository.Update(user);
-        await _unitOfWork.SaveChangesAsync(ct);
+        userRepository.Update(user);
+        await unitOfWork.SaveChangesAsync(ct);
     }
 
     private async Task<LoginResponseDto> IssueTokensAsync(
@@ -240,7 +233,7 @@ public class AuthService(
         CancellationToken ct
     )
     {
-        var accessToken = _tokenProvider.GenerateAccessToken(user);
+        var accessToken = tokenProvider.GenerateAccessToken(user);
         var refreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
 
         return new LoginResponseDto(
@@ -258,13 +251,13 @@ public class AuthService(
         CancellationToken ct
     )
     {
-        var refreshTokenResult = _tokenProvider.GenerateRefreshToken(userId);
-        var utcNow = _dateTimeProvider.UtcNow;
+        var refreshTokenResult = tokenProvider.GenerateRefreshToken(userId);
+        var utcNow = dateTimeProvider.UtcNow;
         var entity = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            TokenHash = _tokenProvider.ComputeHash(refreshTokenResult.Token),
+            TokenHash = tokenProvider.ComputeHash(refreshTokenResult.Token),
             ExpiresAt = refreshTokenResult.ExpiresAt,
             CreatedAt = utcNow,
             UpdatedAt = null,
@@ -272,7 +265,7 @@ public class AuthService(
             CreatedByIp = ipAddress,
         };
 
-        await _refreshTokenRepository.AddAsync(entity, ct);
+        await refreshTokenRepository.AddAsync(entity, ct);
 
         return (entity, refreshTokenResult.Token);
     }
@@ -284,13 +277,13 @@ public class AuthService(
         CancellationToken ct
     )
     {
-        var tokens = await _refreshTokenRepository.GetTokensByUserIdAsync(
+        var tokens = await refreshTokenRepository.GetTokensByUserIdAsync(
             userId,
             includeRevoked: true,
             ct
         );
 
-        var utcNow = _dateTimeProvider.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         foreach (var token in tokens.Where(t => !t.RevokedAt.HasValue))
         {
             token.RevokedAt = utcNow;
@@ -304,13 +297,18 @@ public class AuthService(
             return;
         }
 
-        _refreshTokenRepository.UpdateRange(tokens);
-        await _unitOfWork.SaveChangesAsync(ct);
+        refreshTokenRepository.UpdateRange(tokens);
+        await unitOfWork.SaveChangesAsync(ct);
     }
 
     private int CalculateSeconds(DateTime expiresAt)
     {
-        var seconds = (int)(expiresAt - _dateTimeProvider.UtcNow).TotalSeconds;
+        var seconds = (int)(expiresAt - dateTimeProvider.UtcNow).TotalSeconds;
         return seconds > 0 ? seconds : 0;
+    }
+
+    public async Task LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct)
+    {
+        await RevokeAllSessionsAsync(userId, "User logged out from all sessions", ipAddress, ct);
     }
 }

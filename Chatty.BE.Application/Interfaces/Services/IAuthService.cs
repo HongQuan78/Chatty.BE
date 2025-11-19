@@ -31,7 +31,10 @@ public interface IAuthService
         CancellationToken ct = default
     );
 
-    Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(
+        Guid userId,
+        CancellationToken ct = default
+    );
 
     Task ChangePasswordAsync(
         Guid userId,
@@ -39,4 +42,6 @@ public interface IAuthService
         string newPassword,
         CancellationToken ct = default
     );
+
+    Task LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct);
 }

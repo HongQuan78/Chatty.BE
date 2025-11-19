@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Chatty.BE.API.Contracts.Auth;
 
-public sealed class LogoutRequest
+public sealed record LogoutRequest
 {
     [Required]
     public Guid UserId { get; init; }

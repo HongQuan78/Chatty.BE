@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Chatty.BE.API.Contracts.Auth;
 
-public sealed class ChangePasswordRequest
+public sealed record ChangePasswordRequest
 {
     [Required]
     public Guid UserId { get; init; }
