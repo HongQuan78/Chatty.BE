@@ -19,7 +19,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.Application.Test", "Tests\Chatty.BE.Application.Test\Chatty.BE.Application.Test.csproj", "{36F6E18D-F414-4A87-BC6E-92294C828600}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.API.IntegrationTests", "tests\Chatty.BE.API.IntegrationTests\Chatty.BE.API.IntegrationTests.csproj", "{1CA8C836-C504-4DBA-B1B1-B10B7F1BA32D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.API.IntegrationTests", "Tests\Chatty.BE.API.IntegrationTests\Chatty.BE.API.IntegrationTests.csproj", "{1CA8C836-C504-4DBA-B1B1-B10B7F1BA32D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
