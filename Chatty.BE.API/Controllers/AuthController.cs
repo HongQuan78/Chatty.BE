@@ -51,11 +51,17 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ChangePasswordAsync(
         [FromBody] ChangePasswordRequest request,
         CancellationToken ct
     )
     {
+        var currentUserId = User.GetUserId();
+        if (request.UserId != currentUserId)
+        {
+            return Forbid();
+        }
         await _authService.ChangePasswordAsync(
             request.UserId,
             request.CurrentPassword,
@@ -100,5 +106,25 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         );
 
         return Ok(response);
+    }
+
+    [Authorize]
+    [HttpPost("logout-all-sessions")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> LogoutAllSessionsAsync(
+        [FromBody] LogoutAllSessionsRequest request,
+        CancellationToken ct
+    )
+    {
+        var currentUserId = User.GetUserId();
+        if (request.UserId != currentUserId)
+        {
+            return Forbid();
+        }
+        await _authService.LogoutAllSessionsAsync(request.UserId, HttpContext.GetClientIp(), ct);
+        return NoContent();
     }
 }

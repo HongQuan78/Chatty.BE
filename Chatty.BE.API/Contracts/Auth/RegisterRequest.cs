@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Chatty.BE.API.Contracts.Auth;
 
-public sealed class RegisterRequest
+public sealed record RegisterRequest
 {
     [Required]
     [MaxLength(50)]
