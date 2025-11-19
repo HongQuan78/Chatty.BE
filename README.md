@@ -104,14 +104,14 @@ sequenceDiagram
 ```
 
 ## Core Features
-- **Authentication** – Registration, login (email or user name), and password changes with PBKDF2 hashing plus duplicate safeguards.
-- **User Directory** – Fetch by id/email/username, keyword search, and profile updates with trimming & optional fields.
-- **Conversations** – Private and group conversation workflows, participant management, membership checks, and transaction-backed creation.
-- **Messaging** – Sending messages with attachments, tracking read receipts, unread counts, and conversation `UpdatedAt` updates.
-- **Real-time Notifications** – SignalR hub broadcasting message, read receipt, and participant events.
-- **Persistence Layer** – Repository + Unit of Work abstractions on top of EF Core with SQL Server provider and AutoMapper integration.
-- **Automated Testing** – xUnit suites for domain models, services (Moq), and repository logic (EF Core InMemory).
-
+- **Authentication** - `AuthController` exposes register/login/change-password/logout endpoints built on BCrypt hashing and JWT access/refresh tokens.
+- **Session Management** - Refresh tokens are persisted with IP auditing, reuse detection, and a JWT-guarded "logout all sessions" flow powered by `ClaimsPrincipalExtensions.GetUserId()`.
+- **User Directory** - Fetch by id/email/username, keyword search, and profile updates with trimming & optional fields.
+- **Conversations** - Private and group conversation workflows, participant management, membership checks, and transaction-backed creation.
+- **Messaging** - Sending messages with attachments, tracking read receipts, unread counts, and conversation `UpdatedAt` updates.
+- **Real-time Notifications** - SignalR hub broadcasting message, read receipt, and participant events.
+- **Persistence Layer** - Repository + Unit of Work abstractions on top of EF Core with SQL Server provider and AutoMapper integration.
+- **Automated Testing** - xUnit suites for domain models, services (Moq), repositories (EF Core InMemory), and API integration tests that execute the real authentication stack end-to-end.
 ## Technology Stack
 | Category | Technologies |
 | --- | --- |
@@ -120,9 +120,8 @@ sequenceDiagram
 | Persistence | Entity Framework Core 10, SQL Server provider, Fluent configurations, EF migrations |
 | Data Access Patterns | Repository pattern, Unit of Work, AutoMapper |
 | Real-time | SignalR Hub + strongly typed `IChatClient` |
-| Testing | xUnit, Moq, Microsoft.NET.Test.Sdk, coverlet.collector |
-| CI/CD | GitHub Actions (`dotnet-auto-unit-test.yml`) running restore → build → test with code coverage |
-
+| Testing | xUnit, Moq, Microsoft.NET.Test.Sdk, coverlet.collector, Microsoft.AspNetCore.Mvc.Testing |
+| CI/CD | GitHub Actions (`dotnet-auto-unit-test.yml`) running restore + build + test with code coverage |
 ## Configuration
 
 ### Environment Variables
@@ -130,8 +129,11 @@ sequenceDiagram
 | --- | --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | Hosting environment flag controlling Swagger/UI and configuration binding. | `Development` |
 | `DEFAULT_CONNECTION` | SQL Server connection string consumed by `ChatDbContext`. | Defined in the local `.env` file |
+| `JWT_SECRET` / `JWT_PRIVATE_KEY` | Symmetric or RSA key material used to sign JWT access tokens (set exactly one). | _required_ |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | Token issuer/audience validated during authentication. | `Chatty.BE` / `Chatty.BE.Clients` |
+| `JWT_EXPIRATION_MINUTES` | Optional override for access token lifetime in minutes. | `15` |
+| `JWT_REFRESH_DAYS` | Optional override for refresh token lifetime in days. | `30` |
 | `Logging__LogLevel__*` | Standard ASP.NET Core logging knobs. | See `appsettings*.json` |
-
 ### Secrets & Connection Strings
 1. Create a `.env` file at the repository root (a template is shown below) and set `DEFAULT_CONNECTION` to your SQL Server instance.
 2. The API bootstrapper loads the `.env` file automatically via `DotNetEnv` and forwards the value to `ConnectionStrings:DefaultConnection`.
@@ -141,6 +143,9 @@ sequenceDiagram
 Example `.env`:
 ```bash
 DEFAULT_CONNECTION="Server=localhost\\SQLEXPRESS;Database=ChattyDb;Trusted_Connection=True;TrustServerCertificate=True;"
+JWT_SECRET="local-development-secret-change-me"
+JWT_ISSUER="Chatty.BE.Local"
+JWT_AUDIENCE="Chatty.BE.Clients"
 ```
 
 ## Local Development
@@ -173,7 +178,7 @@ dotnet build Chatty.BE.sln
 # Launch the API (with Swagger + SignalR hub)
 dotnet run --project Chatty.BE.API/Chatty.BE.API.csproj
 ```
-Navigate to `https://localhost:5001` (or the port shown in the console) after the API boots.
+Ensure your `.env` exports both `DEFAULT_CONNECTION` and JWT settings (`JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`) before running so token generation succeeds. Navigate to `https://localhost:5001` (or the port shown in the console) after the API boots.
 
 ### Swagger & API Exploration
 Swagger is automatically enabled in `Development`. Visit:
@@ -196,8 +201,11 @@ dotnet test Chatty.BE.sln
 
 # Focus on application services
 dotnet test Tests/Chatty.BE.Application.Test/Chatty.BE.Application.Test.csproj
+
+# Hit the live AuthController via WebApplicationFactory + EF InMemory
+dotnet test Tests/Chatty.BE.API.IntegrationTests/Chatty.BE.API.IntegrationTests.csproj
 ```
-Application tests use Moq to validate repository interactions and AAA-style naming (`MethodName_ShouldExpected_WhenCondition`). Infrastructure tests rely on `Microsoft.EntityFrameworkCore.InMemory` for fast repository checks. Code coverage is collected via coverlet when invoked by CI.
+Application tests use Moq to validate repository interactions and AAA-style naming (`MethodName_ShouldExpected_WhenCondition`). Infrastructure tests rely on `Microsoft.EntityFrameworkCore.InMemory` for fast repository checks. API integration tests spin up the real ASP.NET Core host with a per-test in-memory database and assert every authentication endpoint (register, login, refresh, change password, logout, logout all sessions). Code coverage is collected via coverlet when invoked by CI.
 
 ## CI/CD
 The GitHub Actions workflow `.github/workflows/dotnet-auto-unit-test.yml` runs on pushes and pull requests targeting `main` or `develop`:
@@ -215,3 +223,10 @@ A dedicated frontend is not included in this repository. Any web/mobile client c
 2. Connecting to `/hubs/chat` via SignalR (JavaScript, .NET, Java, etc.) and joining the `userId` group to receive real-time updates.
 
 Contributions for a companion UI are welcome; keep environments decoupled by isolating the frontend in a sibling repository or a `Chatty.FE` folder.
+
+
+
+
+
+
+
