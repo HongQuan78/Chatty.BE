@@ -16,6 +16,7 @@ public class AuthServiceTests
     private readonly Mock<ITokenProvider> _tokenProvider = new();
     private readonly Mock<IDateTimeProvider> _dateTimeProvider = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IObjectMapper> _objectMapper = new();
     private readonly DateTime _now = new(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     public AuthServiceTests()
@@ -50,7 +51,8 @@ public class AuthServiceTests
             _passwordHasher.Object,
             _tokenProvider.Object,
             _dateTimeProvider.Object,
-            _unitOfWork.Object
+            _unitOfWork.Object,
+            _objectMapper.Object
         );
 
     [Fact]
