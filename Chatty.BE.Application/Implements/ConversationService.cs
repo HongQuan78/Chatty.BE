@@ -1,3 +1,4 @@
+using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
@@ -9,7 +10,8 @@ public class ConversationService(
     IConversationParticipantRepository participantRepository,
     IUserRepository userRepository,
     INotificationService notificationService,
-    IUnitOfWork unitOfWork
+    IUnitOfWork unitOfWork,
+    IObjectMapper objectMapper
 ) : IConversationService
 {
     private readonly IConversationRepository _conversationRepository = conversationRepository;
@@ -18,14 +20,28 @@ public class ConversationService(
     private readonly IUserRepository _userRepository = userRepository;
     private readonly INotificationService _notificationService = notificationService;
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
+    private readonly IObjectMapper _objectMapper = objectMapper;
 
-    public Task<IReadOnlyList<Conversation>> GetConversationsForUserAsync(
+    public async Task<IReadOnlyList<ConversationDto>> GetConversationsForUserAsync(
         Guid userId,
         CancellationToken ct = default
-    ) => _conversationRepository.GetConversationsOfUserAsync(userId, ct);
+    )
+    {
+        var conversations = await _conversationRepository.GetConversationsOfUserAsync(userId, ct);
+        return _objectMapper.Map<List<ConversationDto>>(conversations);
+    }
 
-    public Task<Conversation?> GetByIdAsync(Guid conversationId, CancellationToken ct = default) =>
-        _conversationRepository.GetWithParticipantsAsync(conversationId, ct);
+    public async Task<ConversationDto?> GetByIdAsync(
+        Guid conversationId,
+        CancellationToken ct = default
+    )
+    {
+        var conversation = await _conversationRepository.GetWithParticipantsAsync(
+            conversationId,
+            ct
+        );
+        return conversation is null ? null : _objectMapper.Map<ConversationDto>(conversation);
+    }
 
     public Task<bool> UserIsInConversationAsync(
         Guid conversationId,
@@ -33,7 +49,7 @@ public class ConversationService(
         CancellationToken ct = default
     ) => _conversationRepository.UserIsInConversationAsync(conversationId, userId, ct);
 
-    public async Task<Conversation> CreatePrivateConversationAsync(
+    public async Task<ConversationDto> CreatePrivateConversationAsync(
         Guid userAId,
         Guid userBId,
         CancellationToken ct = default
@@ -54,7 +70,7 @@ public class ConversationService(
         );
         if (existing is not null)
         {
-            return existing;
+            return _objectMapper.Map<ConversationDto>(existing);
         }
 
         var utcNow = DateTime.UtcNow;
@@ -88,10 +104,10 @@ public class ConversationService(
         await _notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userAId, ct);
         await _notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userBId, ct);
 
-        return conversation;
+        return _objectMapper.Map<ConversationDto>(conversation);
     }
 
-    public async Task<Conversation> CreateGroupConversationAsync(
+    public async Task<ConversationDto> CreateGroupConversationAsync(
         Guid ownerId,
         string name,
         IEnumerable<Guid> participantIds,
@@ -103,7 +119,7 @@ public class ConversationService(
         await EnsureUserExistsAsync(ownerId, ct);
 
         var distinctParticipantIds =
-            participantIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? new List<Guid>();
+            participantIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? [];
         if (!distinctParticipantIds.Contains(ownerId))
         {
             distinctParticipantIds.Add(ownerId);
@@ -158,7 +174,7 @@ public class ConversationService(
             );
         }
 
-        return conversation;
+        return _objectMapper.Map<ConversationDto>(conversation);
     }
 
     public async Task AddParticipantAsync(
@@ -219,10 +235,8 @@ public class ConversationService(
 
     private async Task EnsureConversationExistsAsync(Guid conversationId, CancellationToken ct)
     {
-        var exists = await _conversationRepository.GetByIdAsync(conversationId, ct);
-        if (exists is null)
-        {
-            throw new KeyNotFoundException($"Conversation {conversationId} was not found.");
-        }
+        var exists =
+            await _conversationRepository.GetByIdAsync(conversationId, ct)
+            ?? throw new KeyNotFoundException($"Conversation {conversationId} was not found.");
     }
 }
