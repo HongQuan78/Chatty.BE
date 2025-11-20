@@ -2,6 +2,7 @@ using Chatty.BE.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -38,7 +39,9 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<ChatDbContext>(options =>
             {
-                options.UseInMemoryDatabase(_databaseName);
+                options
+                    .UseInMemoryDatabase(_databaseName)
+                    .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
 
             using var scope = services.BuildServiceProvider().CreateScope();
