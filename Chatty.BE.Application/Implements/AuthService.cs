@@ -1,4 +1,5 @@
 using System.Net;
+using Chatty.BE.Application.Common.Extensions;
 using Chatty.BE.Application.DTOs.Auth;
 using Chatty.BE.Application.Exceptions;
 using Chatty.BE.Application.Interfaces.Repositories;
@@ -13,9 +14,12 @@ public class AuthService(
     IPasswordHasher passwordHasher,
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
-    IUnitOfWork unitOfWork
+    IUnitOfWork unitOfWork,
+    IObjectMapper objectMapper
 ) : IAuthService
 {
+    private readonly IObjectMapper _mapper = objectMapper;
+
     public async Task<User> RegisterAsync(
         string userName,
         string email,
@@ -139,9 +143,9 @@ public class AuthService(
 
         return new RefreshTokenResponseDto(
             accessToken.Token,
-            CalculateSeconds(accessToken.ExpiresAt),
+            dateTimeProvider.SecondsUntil(accessToken.ExpiresAt),
             Token,
-            CalculateSeconds(Entity.ExpiresAt)
+            dateTimeProvider.SecondsUntil(Entity.ExpiresAt)
         );
     }
 
@@ -190,14 +194,7 @@ public class AuthService(
         return tokens
             .OrderByDescending(t => t.CreatedAt)
             .Where(t => t.ExpiresAt > utcNow)
-            .Select(t => new SessionDto(
-                t.Id,
-                t.CreatedAt,
-                t.ExpiresAt,
-                t.CreatedByIp,
-                t.RevokedAt.HasValue,
-                t.IsReusedToken
-            ))
+            .Select(t => _mapper.Map<SessionDto>(t))
             .ToList();
     }
 
@@ -239,9 +236,9 @@ public class AuthService(
         return new LoginResponseDto(
             user.Id,
             accessToken.Token,
-            CalculateSeconds(accessToken.ExpiresAt),
+            dateTimeProvider.SecondsUntil(accessToken.ExpiresAt),
             Token,
-            CalculateSeconds(Entity.ExpiresAt)
+            dateTimeProvider.SecondsUntil(Entity.ExpiresAt)
         );
     }
 
@@ -299,12 +296,6 @@ public class AuthService(
 
         refreshTokenRepository.UpdateRange(tokens);
         await unitOfWork.SaveChangesAsync(ct);
-    }
-
-    private int CalculateSeconds(DateTime expiresAt)
-    {
-        var seconds = (int)(expiresAt - dateTimeProvider.UtcNow).TotalSeconds;
-        return seconds > 0 ? seconds : 0;
     }
 
     public async Task LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct)

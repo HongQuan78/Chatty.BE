@@ -1,5 +1,6 @@
 using System.Linq;
 using AutoMapper;
+using Chatty.BE.Application.DTOs.Auth;
 using Chatty.BE.Application.DTOs.ConversationParticipants;
 using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.DTOs.MessageAttachments;
@@ -155,5 +156,14 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.IsDeleted, opt => opt.Ignore())
             .ForMember(dest => dest.DeliveredAt, opt => opt.Ignore())
             .ForMember(dest => dest.ReadAt, opt => opt.Ignore());
+
+        // Auth sessions
+        CreateMap<RefreshToken, SessionDto>()
+            .ForCtorParam("TokenId", opt => opt.MapFrom(src => src.Id))
+            .ForCtorParam("CreatedAt", opt => opt.MapFrom(src => src.CreatedAt))
+            .ForCtorParam("ExpiresAt", opt => opt.MapFrom(src => src.ExpiresAt))
+            .ForCtorParam("CreatedByIp", opt => opt.MapFrom(src => src.CreatedByIp))
+            .ForCtorParam("IsRevoked", opt => opt.MapFrom(src => src.RevokedAt.HasValue))
+            .ForCtorParam("IsReused", opt => opt.MapFrom(src => src.IsReusedToken));
     }
 }
