@@ -1,4 +1,5 @@
 using Chatty.BE.Application.Implements;
+using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
@@ -13,6 +14,36 @@ public class ConversationServiceTests
     private readonly Mock<IUserRepository> _userRepository = new();
     private readonly Mock<INotificationService> _notificationService = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IObjectMapper> _objectMapper = new();
+
+    public ConversationServiceTests()
+    {
+        _objectMapper
+            .Setup(m => m.Map<ConversationDto>(It.IsAny<Conversation>()))
+            .Returns<Conversation>(c => new ConversationDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                OwnerId = c.OwnerId,
+                IsGroup = c.IsGroup,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+            });
+
+        _objectMapper
+            .Setup(m => m.Map<List<ConversationDto>>(It.IsAny<IReadOnlyList<Conversation>>()))
+            .Returns<IReadOnlyList<Conversation>>(list =>
+                list.Select(c => new ConversationDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    OwnerId = c.OwnerId,
+                    IsGroup = c.IsGroup,
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt,
+                }).ToList()
+            );
+    }
 
     private ConversationService CreateService() =>
         new(
@@ -20,7 +51,8 @@ public class ConversationServiceTests
             _participantRepository.Object,
             _userRepository.Object,
             _notificationService.Object,
-            _unitOfWork.Object
+            _unitOfWork.Object,
+            _objectMapper.Object
         );
 
     [Fact]
@@ -106,7 +138,7 @@ public class ConversationServiceTests
         var conversation = await service.CreatePrivateConversationAsync(userA, userB);
 
         // Assert
-        Assert.Same(existing, conversation);
+        Assert.Equal(existing.Id, conversation.Id);
         _conversationRepository.Verify(
             r => r.AddAsync(It.IsAny<Conversation>(), It.IsAny<CancellationToken>()),
             Times.Never
