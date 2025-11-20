@@ -189,6 +189,51 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetActiveSessionsAsync_ReturnsActiveSessionsForCurrentUser()
+    {
+        var session = await RegisterAndLoginAsync();
+
+        var refreshResponse = await _client.PostAsJsonAsync(
+            "/api/auth/refresh",
+            new RefreshTokenRequestDto(session.Login.RefreshToken)
+        );
+        refreshResponse.EnsureSuccessStatusCode();
+        var refreshedTokens =
+            await refreshResponse.Content.ReadFromJsonAsync<RefreshTokenResponseDto>();
+        Assert.NotNull(refreshedTokens);
+
+        var secondLogin = await PostLoginAsync(
+            new LoginRequestDto(session.Register.Email, session.Password)
+        );
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/sessions");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            secondLogin.AccessToken
+        );
+
+        var response = await _client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        var sessions = await response.Content.ReadFromJsonAsync<List<SessionDto>>();
+        Assert.NotNull(sessions);
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+        var utcNow = DateTime.UtcNow;
+        var activeTokens = await dbContext
+            .RefreshTokens.Where(t =>
+                t.UserId == session.Login.UserId && t.RevokedAt == null && t.ExpiresAt > utcNow
+            )
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => t.Id)
+            .ToListAsync();
+
+        Assert.Equal(activeTokens.Count, sessions!.Count);
+        Assert.Equal(activeTokens, sessions.Select(s => s.TokenId).ToList());
+    }
+
     private static RegisterRequest BuildRegisterRequest(string? password = null)
     {
         var unique = Guid.NewGuid().ToString("N");

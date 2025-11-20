@@ -127,12 +127,12 @@ public class AuthService(
             ?? throw new AppException(HttpStatusCode.NotFound, "User not found for refresh token.");
 
         var accessToken = tokenProvider.GenerateAccessToken(user);
-        var newRefreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
+        var (Entity, Token) = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
 
         storedToken.RevokedAt = utcNow;
         storedToken.ReasonRevoked = "Replaced by new token";
         storedToken.RevokedByIp = ipAddress;
-        storedToken.ReplacedByTokenId = newRefreshToken.Entity.Id;
+        storedToken.ReplacedByTokenId = Entity.Id;
 
         refreshTokenRepository.Update(storedToken);
         await unitOfWork.SaveChangesAsync(ct);
@@ -140,8 +140,8 @@ public class AuthService(
         return new RefreshTokenResponseDto(
             accessToken.Token,
             CalculateSeconds(accessToken.ExpiresAt),
-            newRefreshToken.Token,
-            CalculateSeconds(newRefreshToken.Entity.ExpiresAt)
+            Token,
+            CalculateSeconds(Entity.ExpiresAt)
         );
     }
 
@@ -234,14 +234,14 @@ public class AuthService(
     )
     {
         var accessToken = tokenProvider.GenerateAccessToken(user);
-        var refreshToken = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
+        var (Entity, Token) = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
 
         return new LoginResponseDto(
             user.Id,
             accessToken.Token,
             CalculateSeconds(accessToken.ExpiresAt),
-            refreshToken.Token,
-            CalculateSeconds(refreshToken.Entity.ExpiresAt)
+            Token,
+            CalculateSeconds(Entity.ExpiresAt)
         );
     }
 
