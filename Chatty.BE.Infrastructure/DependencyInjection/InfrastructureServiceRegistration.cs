@@ -47,6 +47,7 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenProvider, JwtTokenProvider>();
+        services.AddSingleton<IObjectMapper, ObjectMapper>();
 
         // Application services
         services.AddScoped<IAuthService, AuthService>();
