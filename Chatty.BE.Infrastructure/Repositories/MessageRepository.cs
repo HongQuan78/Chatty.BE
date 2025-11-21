@@ -1,6 +1,7 @@
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Domain.Enums;
+using Chatty.BE.Infrastructure.Extensions;
 using Chatty.BE.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,17 +18,14 @@ public class MessageRepository(ChatDbContext context)
         CancellationToken ct = default
     )
     {
-        var take = Math.Max(pageSize, 1);
-        var skip = Math.Max(page - 1, 0) * take;
-
-        return await _context
+        var query = _context
             .Messages.AsNoTracking()
             .Where(m => m.ConversationId == conversationId)
             .Include(m => m.Attachments)
             .OrderByDescending(m => m.CreatedAt)
-            .Skip(skip)
-            .Take(take)
-            .ToListAsync(ct);
+            .Paginate(page, pageSize);
+
+        return await query.ToListAsync(ct);
     }
 
     public Task<Message?> GetLastMessageAsync(Guid conversationId, CancellationToken ct = default)

@@ -2,9 +2,9 @@ name: "Auto Unit Test CI"
 
 on:
   push:
-    branches: ["*"]
+    branches: ["**"]
   pull_request:
-    branches: ["main", "develop"]
+    branches: ["**"]
 
 jobs:
   run-unit-tests:
@@ -26,4 +26,7 @@ jobs:
         run: dotnet build Chatty.BE.sln --configuration Release --no-restore
 
       - name: Run unit tests
-        run: dotnet test Chatty.BE.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+        run: |
+          dotnet test Tests/Chatty.BE.Application.Test/Chatty.BE.Application.Test.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
+          dotnet test Tests/Chatty.BE.Domain.Tests/Chatty.BE.Domain.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
+          dotnet test Tests/Chatty.BE.Infrastructure.Tests/Chatty.BE.Infrastructure.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
