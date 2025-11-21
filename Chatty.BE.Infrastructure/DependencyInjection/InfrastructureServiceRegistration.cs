@@ -1,6 +1,8 @@
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
+using Chatty.BE.Infrastructure.Config;
+using Chatty.BE.Infrastructure.Config.Upload;
 using Chatty.BE.Infrastructure.Mappings;
 using Chatty.BE.Infrastructure.Persistence;
 using Chatty.BE.Infrastructure.Repositories;
@@ -42,12 +44,12 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        var jwtOptions = BuildJwtOptions(configuration);
-        services.AddSingleton(jwtOptions);
+        services.AddSingleton(JwtBuilder.BuildJwtOptions(configuration));
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenProvider, JwtTokenProvider>();
         services.AddSingleton<IObjectMapper, ObjectMapper>();
+        services.AddSingleton(CloudinaryOptionsBuilder.Build(configuration));
 
         // Application services
         services.AddScoped<IAuthService, AuthService>();
@@ -55,81 +57,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<INotificationService, SignalRNotificationService>();
+        services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
 
         return services;
-    }
-
-    private static JwtOptions BuildJwtOptions(IConfiguration configuration)
-    {
-        static int ResolveDuration(string envKey, string? configValue, int defaultValue)
-        {
-            var envValue = Environment.GetEnvironmentVariable(envKey);
-            if (int.TryParse(envValue, out var envSeconds) && envSeconds > 0)
-            {
-                return envSeconds;
-            }
-            if (int.TryParse(configValue, out var configSeconds) && configSeconds > 0)
-            {
-                return configSeconds;
-            }
-            return defaultValue;
-        }
-
-        var privateKey = Environment.GetEnvironmentVariable("JWT_PRIVATE_KEY");
-        var symmetricKey = Environment.GetEnvironmentVariable("JWT_SECRET");
-
-        if (string.IsNullOrWhiteSpace(privateKey) && string.IsNullOrWhiteSpace(symmetricKey))
-        {
-            throw new InvalidOperationException(
-                "JWT_PRIVATE_KEY or JWT_SECRET must be provided via environment variables."
-            );
-        }
-
-        var issuer =
-            Environment.GetEnvironmentVariable("JWT_ISSUER")
-            ?? configuration["Jwt:Issuer"]
-            ?? "Chatty.BE";
-
-        var audience =
-            Environment.GetEnvironmentVariable("JWT_AUDIENCE")
-            ?? configuration["Jwt:Audience"]
-            ?? "Chatty.BE.Clients";
-
-        var envAccessMinutes = Environment.GetEnvironmentVariable("JWT_EXPIRATION_MINUTES");
-        var accessSecondsFromMinutes =
-            int.TryParse(envAccessMinutes, out var minutes) && minutes > 0
-                ? minutes * 60
-                : (int?)null;
-
-        var envRefreshDays = Environment.GetEnvironmentVariable("JWT_REFRESH_DAYS");
-        var refreshSecondsFromDays =
-            int.TryParse(envRefreshDays, out var days) && days > 0
-                ? days * 60 * 60 * 24
-                : (int?)null;
-
-        return new JwtOptions
-        {
-            Issuer = issuer,
-            Audience = audience,
-            AccessTokenLifetime = TimeSpan.FromSeconds(
-                accessSecondsFromMinutes
-                    ?? ResolveDuration(
-                        "ACCESS_TOKEN_EXP_SECONDS",
-                        configuration["Jwt:AccessTokenSeconds"],
-                        900
-                    )
-            ),
-            RefreshTokenLifetime = TimeSpan.FromSeconds(
-                refreshSecondsFromDays
-                    ?? ResolveDuration(
-                        "REFRESH_TOKEN_EXP_SECONDS",
-                        configuration["Jwt:RefreshTokenSeconds"],
-                        60 * 60 * 24 * 30
-                    )
-            ),
-            PrivateKey = privateKey,
-            PublicKey = Environment.GetEnvironmentVariable("JWT_PUBLIC_KEY"),
-            SymmetricKey = symmetricKey,
-        };
     }
 }
