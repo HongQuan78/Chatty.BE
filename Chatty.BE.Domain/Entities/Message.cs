@@ -13,9 +13,6 @@ namespace Chatty.BE.Domain.Entities
         [Required]
         public Guid SenderId { get; set; }
 
-        /// <summary>
-        /// Nội dung chính của message (text hoặc caption cho image/file).
-        /// </summary>
         [Required]
         [MaxLength(4000)]
         public string Content { get; set; } = default!;
@@ -23,9 +20,6 @@ namespace Chatty.BE.Domain.Entities
         [Required]
         public MessageType Type { get; set; }
 
-        /// <summary>
-        /// Trạng thái tổng quát (ví dụ: trạng thái phía sender).
-        /// </summary>
         [Required]
         public MessageStatus Status { get; set; }
 
