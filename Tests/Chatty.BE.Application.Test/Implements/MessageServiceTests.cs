@@ -1,4 +1,5 @@
 using Chatty.BE.Application.Implements;
+using Chatty.BE.Application.DTOs.Messages;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
@@ -16,6 +17,27 @@ public class MessageServiceTests
     private readonly Mock<IConversationParticipantRepository> _participantRepository = new();
     private readonly Mock<INotificationService> _notificationService = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IObjectMapper> _objectMapper = new();
+
+    public MessageServiceTests()
+    {
+        _objectMapper
+            .Setup(m => m.Map<Message>(It.IsAny<Message>()))
+            .Returns<Message>(m => m);
+        _objectMapper
+            .Setup(m => m.Map<MessageDto>(It.IsAny<Message>()))
+            .Returns<Message>(m => new MessageDto
+            {
+                Id = m.Id,
+                ConversationId = m.ConversationId,
+                SenderId = m.SenderId,
+                Content = m.Content,
+                Type = m.Type,
+                Status = m.Status,
+                CreatedAt = m.CreatedAt,
+                UpdatedAt = m.UpdatedAt,
+            });
+    }
 
     private MessageService CreateService() =>
         new(
@@ -25,7 +47,8 @@ public class MessageServiceTests
             _conversationRepository.Object,
             _participantRepository.Object,
             _notificationService.Object,
-            _unitOfWork.Object
+            _unitOfWork.Object,
+            _objectMapper.Object
         );
 
     [Fact]

@@ -1,3 +1,4 @@
+using Chatty.BE.Application.DTOs.Messages;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
@@ -12,7 +13,8 @@ public class MessageService(
     IConversationRepository conversationRepository,
     IConversationParticipantRepository participantRepository,
     INotificationService notificationService,
-    IUnitOfWork unitOfWork
+    IUnitOfWork unitOfWork,
+    IObjectMapper mapper
 ) : IMessageService
 {
     private readonly IMessageRepository _messageRepository = messageRepository;
@@ -24,12 +26,21 @@ public class MessageService(
     private readonly INotificationService _notificationService = notificationService;
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
 
-    public Task<IReadOnlyList<Message>> GetMessagesAsync(
+    public async Task<IReadOnlyList<MessageDto>> GetMessagesAsync(
         Guid conversationId,
         int page,
         int pageSize,
         CancellationToken ct = default
-    ) => _messageRepository.GetMessagesAsync(conversationId, page, pageSize, ct);
+    )
+    {
+        var messageList = await _messageRepository.GetMessagesAsync(
+            conversationId,
+            page,
+            pageSize,
+            ct
+        );
+        return mapper.Map<IReadOnlyList<MessageDto>>(messageList);
+    }
 
     public Task<int> CountUnreadMessagesAsync(
         Guid conversationId,
@@ -37,7 +48,7 @@ public class MessageService(
         CancellationToken ct = default
     ) => _messageRepository.CountUnreadMessagesAsync(conversationId, userId, ct);
 
-    public async Task<Message> SendMessageAsync(
+    public async Task<MessageDto> SendMessageAsync(
         Guid conversationId,
         Guid senderId,
         string content,
@@ -136,7 +147,7 @@ public class MessageService(
             await _notificationService.NotifyMessageSentAsync(message, recipientIds, ct);
         }
 
-        return message;
+        return mapper.Map<MessageDto>(message);
     }
 
     public async Task MarkConversationAsReadAsync(
