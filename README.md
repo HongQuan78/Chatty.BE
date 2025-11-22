@@ -54,6 +54,23 @@ Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provid
    ```
 6. Open Swagger UI at `https://localhost:5001/swagger` (or the port shown on startup).
 
+## Database & Migrations
+- Ensure SQL Server is reachable and `DEFAULT_CONNECTION`/`ConnectionStrings:DefaultConnection` is set.
+- Create/update database with EF Core tools:
+  ```bash
+  dotnet ef database update \
+    --project Chatty.BE.Infrastructure \
+    --startup-project Chatty.BE.API
+  ```
+  If `dotnet ef` is not installed, add it once: `dotnet tool install --global dotnet-ef`.
+- To add a migration (example):
+  ```bash
+  dotnet ef migrations add AddMyChange \
+    --project Chatty.BE.Infrastructure \
+    --startup-project Chatty.BE.API \
+    --output-dir Persistence/Migrations
+  ```
+
 ## Configuration
 Configuration is read from environment variables (preferred) or `appsettings.*`. Key settings:
 
