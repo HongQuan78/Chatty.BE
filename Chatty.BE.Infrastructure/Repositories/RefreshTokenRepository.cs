@@ -5,11 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Chatty.BE.Infrastructure.Repositories;
 
-public sealed class RefreshTokenRepository : GenericRepository<RefreshToken>, IRefreshTokenRepository
+public sealed class RefreshTokenRepository(ChatDbContext context)
+    : GenericRepository<RefreshToken>(context),
+        IRefreshTokenRepository
 {
-    public RefreshTokenRepository(ChatDbContext context)
-        : base(context) { }
-
     public Task<RefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);

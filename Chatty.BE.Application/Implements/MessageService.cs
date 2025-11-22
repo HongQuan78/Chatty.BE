@@ -17,15 +17,6 @@ public class MessageService(
     IObjectMapper mapper
 ) : IMessageService
 {
-    private readonly IMessageRepository _messageRepository = messageRepository;
-    private readonly IMessageAttachmentRepository _attachmentRepository = attachmentRepository;
-    private readonly IMessageReceiptRepository _receiptRepository = receiptRepository;
-    private readonly IConversationRepository _conversationRepository = conversationRepository;
-    private readonly IConversationParticipantRepository _participantRepository =
-        participantRepository;
-    private readonly INotificationService _notificationService = notificationService;
-    private readonly IUnitOfWork _unitOfWork = unitOfWork;
-
     public async Task<IReadOnlyList<MessageDto>> GetMessagesAsync(
         Guid conversationId,
         int page,
@@ -33,7 +24,7 @@ public class MessageService(
         CancellationToken ct = default
     )
     {
-        var messageList = await _messageRepository.GetMessagesAsync(
+        var messageList = await messageRepository.GetMessagesAsync(
             conversationId,
             page,
             pageSize,
@@ -46,7 +37,7 @@ public class MessageService(
         Guid conversationId,
         Guid userId,
         CancellationToken ct = default
-    ) => _messageRepository.CountUnreadMessagesAsync(conversationId, userId, ct);
+    ) => messageRepository.CountUnreadMessagesAsync(conversationId, userId, ct);
 
     public async Task<MessageDto> SendMessageAsync(
         Guid conversationId,
@@ -60,10 +51,10 @@ public class MessageService(
         ArgumentNullException.ThrowIfNull(content);
 
         var conversation =
-            await _conversationRepository.GetByIdAsync(conversationId, ct)
+            await conversationRepository.GetByIdAsync(conversationId, ct)
             ?? throw new KeyNotFoundException($"Conversation {conversationId} was not found.");
 
-        var isParticipant = await _conversationRepository.UserIsInConversationAsync(
+        var isParticipant = await conversationRepository.UserIsInConversationAsync(
             conversationId,
             senderId,
             ct
@@ -87,7 +78,7 @@ public class MessageService(
             IsDeleted = false,
         };
 
-        await _messageRepository.AddAsync(message, ct);
+        await messageRepository.AddAsync(message, ct);
 
         if (attachments is not null)
         {
@@ -108,11 +99,11 @@ public class MessageService(
 
             if (preparedAttachments.Count > 0)
             {
-                await _attachmentRepository.AddRangeAsync(preparedAttachments, ct);
+                await attachmentRepository.AddRangeAsync(preparedAttachments, ct);
             }
         }
 
-        var participants = await _participantRepository.GetParticipantsAsync(conversationId, ct);
+        var participants = await participantRepository.GetParticipantsAsync(conversationId, ct);
         var recipientIds = participants
             .Select(p => p.Id)
             .Where(id => id != senderId)
@@ -134,17 +125,17 @@ public class MessageService(
                 })
                 .ToList();
 
-            await _receiptRepository.AddRangeAsync(receipts, ct);
+            await receiptRepository.AddRangeAsync(receipts, ct);
         }
 
         conversation.UpdatedAt = utcNow;
-        _conversationRepository.Update(conversation);
+        conversationRepository.Update(conversation);
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(ct);
 
         if (recipientIds.Count > 0)
         {
-            await _notificationService.NotifyMessageSentAsync(message, recipientIds, ct);
+            await notificationService.NotifyMessageSentAsync(message, recipientIds, ct);
         }
 
         return mapper.Map<MessageDto>(message);
@@ -156,7 +147,7 @@ public class MessageService(
         CancellationToken ct = default
     )
     {
-        var isParticipant = await _conversationRepository.UserIsInConversationAsync(
+        var isParticipant = await conversationRepository.UserIsInConversationAsync(
             conversationId,
             readerUserId,
             ct
@@ -166,7 +157,7 @@ public class MessageService(
             throw new InvalidOperationException("User does not belong to the conversation.");
         }
 
-        var unreadIds = await _receiptRepository.GetUnreadMessageIdsForUserAsync(
+        var unreadIds = await receiptRepository.GetUnreadMessageIdsForUserAsync(
             conversationId,
             readerUserId,
             ct
@@ -178,11 +169,11 @@ public class MessageService(
 
         foreach (var messageId in unreadIds)
         {
-            await _receiptRepository.MarkAsReadAsync(messageId, readerUserId, ct);
+            await receiptRepository.MarkAsReadAsync(messageId, readerUserId, ct);
         }
 
-        await _unitOfWork.SaveChangesAsync(ct);
-        await _notificationService.NotifyMessagesReadAsync(
+        await unitOfWork.SaveChangesAsync(ct);
+        await notificationService.NotifyMessagesReadAsync(
             conversationId,
             readerUserId,
             unreadIds,

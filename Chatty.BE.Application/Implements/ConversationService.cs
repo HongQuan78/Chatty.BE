@@ -14,21 +14,13 @@ public class ConversationService(
     IObjectMapper objectMapper
 ) : IConversationService
 {
-    private readonly IConversationRepository _conversationRepository = conversationRepository;
-    private readonly IConversationParticipantRepository _participantRepository =
-        participantRepository;
-    private readonly IUserRepository _userRepository = userRepository;
-    private readonly INotificationService _notificationService = notificationService;
-    private readonly IUnitOfWork _unitOfWork = unitOfWork;
-    private readonly IObjectMapper _objectMapper = objectMapper;
-
     public async Task<IReadOnlyList<ConversationDto>> GetConversationsForUserAsync(
         Guid userId,
         CancellationToken ct = default
     )
     {
-        var conversations = await _conversationRepository.GetConversationsOfUserAsync(userId, ct);
-        return _objectMapper.Map<List<ConversationDto>>(conversations);
+        var conversations = await conversationRepository.GetConversationsOfUserAsync(userId, ct);
+        return objectMapper.Map<List<ConversationDto>>(conversations);
     }
 
     public async Task<ConversationDto?> GetByIdAsync(
@@ -36,18 +28,18 @@ public class ConversationService(
         CancellationToken ct = default
     )
     {
-        var conversation = await _conversationRepository.GetWithParticipantsAsync(
+        var conversation = await conversationRepository.GetWithParticipantsAsync(
             conversationId,
             ct
         );
-        return conversation is null ? null : _objectMapper.Map<ConversationDto>(conversation);
+        return conversation is null ? null : objectMapper.Map<ConversationDto>(conversation);
     }
 
     public Task<bool> UserIsInConversationAsync(
         Guid conversationId,
         Guid userId,
         CancellationToken ct = default
-    ) => _conversationRepository.UserIsInConversationAsync(conversationId, userId, ct);
+    ) => conversationRepository.UserIsInConversationAsync(conversationId, userId, ct);
 
     public async Task<ConversationDto> CreatePrivateConversationAsync(
         Guid userAId,
@@ -63,14 +55,14 @@ public class ConversationService(
         await EnsureUserExistsAsync(userAId, ct);
         await EnsureUserExistsAsync(userBId, ct);
 
-        var existing = await _conversationRepository.GetPrivateConversationAsync(
+        var existing = await conversationRepository.GetPrivateConversationAsync(
             userAId,
             userBId,
             ct
         );
         if (existing is not null)
         {
-            return _objectMapper.Map<ConversationDto>(existing);
+            return objectMapper.Map<ConversationDto>(existing);
         }
 
         var utcNow = DateTime.UtcNow;
@@ -85,26 +77,26 @@ public class ConversationService(
             IsDeleted = false,
         };
 
-        await _unitOfWork.BeginTransactionAsync(ct);
+        await unitOfWork.BeginTransactionAsync(ct);
         try
         {
-            await _conversationRepository.AddAsync(conversation, ct);
-            await _participantRepository.AddParticipantAsync(conversation.Id, userAId, ct);
-            await _participantRepository.AddParticipantAsync(conversation.Id, userBId, ct);
+            await conversationRepository.AddAsync(conversation, ct);
+            await participantRepository.AddParticipantAsync(conversation.Id, userAId, ct);
+            await participantRepository.AddParticipantAsync(conversation.Id, userBId, ct);
 
-            await _unitOfWork.SaveChangesAsync(ct);
-            await _unitOfWork.CommitAsync(ct);
+            await unitOfWork.SaveChangesAsync(ct);
+            await unitOfWork.CommitAsync(ct);
         }
         catch
         {
-            await _unitOfWork.RollbackAsync(ct);
+            await unitOfWork.RollbackAsync(ct);
             throw;
         }
 
-        await _notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userAId, ct);
-        await _notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userBId, ct);
+        await notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userAId, ct);
+        await notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userBId, ct);
 
-        return _objectMapper.Map<ConversationDto>(conversation);
+        return objectMapper.Map<ConversationDto>(conversation);
     }
 
     public async Task<ConversationDto> CreateGroupConversationAsync(
@@ -142,39 +134,35 @@ public class ConversationService(
             IsDeleted = false,
         };
 
-        await _unitOfWork.BeginTransactionAsync(ct);
+        await unitOfWork.BeginTransactionAsync(ct);
         try
         {
-            await _conversationRepository.AddAsync(conversation, ct);
+            await conversationRepository.AddAsync(conversation, ct);
 
             foreach (var participantId in distinctParticipantIds)
             {
-                await _participantRepository.AddParticipantAsync(
-                    conversation.Id,
-                    participantId,
-                    ct
-                );
+                await participantRepository.AddParticipantAsync(conversation.Id, participantId, ct);
             }
 
-            await _unitOfWork.SaveChangesAsync(ct);
-            await _unitOfWork.CommitAsync(ct);
+            await unitOfWork.SaveChangesAsync(ct);
+            await unitOfWork.CommitAsync(ct);
         }
         catch
         {
-            await _unitOfWork.RollbackAsync(ct);
+            await unitOfWork.RollbackAsync(ct);
             throw;
         }
 
         foreach (var participantId in distinctParticipantIds)
         {
-            await _notificationService.NotifyUserJoinedConversationAsync(
+            await notificationService.NotifyUserJoinedConversationAsync(
                 conversation.Id,
                 participantId,
                 ct
             );
         }
 
-        return _objectMapper.Map<ConversationDto>(conversation);
+        return objectMapper.Map<ConversationDto>(conversation);
     }
 
     public async Task AddParticipantAsync(
@@ -186,7 +174,7 @@ public class ConversationService(
         await EnsureConversationExistsAsync(conversationId, ct);
         await EnsureUserExistsAsync(userId, ct);
 
-        var alreadyParticipant = await _participantRepository.IsParticipantAsync(
+        var alreadyParticipant = await participantRepository.IsParticipantAsync(
             conversationId,
             userId,
             ct
@@ -196,9 +184,9 @@ public class ConversationService(
             return;
         }
 
-        await _participantRepository.AddParticipantAsync(conversationId, userId, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
-        await _notificationService.NotifyUserJoinedConversationAsync(conversationId, userId, ct);
+        await participantRepository.AddParticipantAsync(conversationId, userId, ct);
+        await unitOfWork.SaveChangesAsync(ct);
+        await notificationService.NotifyUserJoinedConversationAsync(conversationId, userId, ct);
     }
 
     public async Task RemoveParticipantAsync(
@@ -209,7 +197,7 @@ public class ConversationService(
     {
         await EnsureConversationExistsAsync(conversationId, ct);
 
-        var isParticipant = await _participantRepository.IsParticipantAsync(
+        var isParticipant = await participantRepository.IsParticipantAsync(
             conversationId,
             userId,
             ct
@@ -219,14 +207,14 @@ public class ConversationService(
             return;
         }
 
-        await _participantRepository.RemoveParticipantAsync(conversationId, userId, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
-        await _notificationService.NotifyUserLeftConversationAsync(conversationId, userId, ct);
+        await participantRepository.RemoveParticipantAsync(conversationId, userId, ct);
+        await unitOfWork.SaveChangesAsync(ct);
+        await notificationService.NotifyUserLeftConversationAsync(conversationId, userId, ct);
     }
 
     private async Task EnsureUserExistsAsync(Guid userId, CancellationToken ct)
     {
-        var exists = await _userRepository.ExistsAsync(userId, ct);
+        var exists = await userRepository.ExistsAsync(userId, ct);
         if (!exists)
         {
             throw new KeyNotFoundException($"User {userId} was not found.");
@@ -236,7 +224,7 @@ public class ConversationService(
     private async Task EnsureConversationExistsAsync(Guid conversationId, CancellationToken ct)
     {
         var exists =
-            await _conversationRepository.GetByIdAsync(conversationId, ct)
+            await conversationRepository.GetByIdAsync(conversationId, ct)
             ?? throw new KeyNotFoundException($"Conversation {conversationId} was not found.");
     }
 }
