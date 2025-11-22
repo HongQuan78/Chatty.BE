@@ -2,6 +2,27 @@
 
 Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provides JWT authentication with refresh tokens, private and group conversations, messaging with attachments, Cloudinary-based file uploads, and SignalR notifications, backed by SQL Server and Entity Framework Core.
 
+## Table of Contents
+- [Chatty.BE](#chattybe)
+  - [Table of Contents](#table-of-contents)
+  - [Key Features](#key-features)
+  - [System Architecture](#system-architecture)
+  - [Project Structure](#project-structure)
+  - [Tech Stack](#tech-stack)
+  - [Getting Started](#getting-started)
+  - [Database \& Migrations](#database--migrations)
+  - [Configuration](#configuration)
+  - [Running \& Building](#running--building)
+  - [API Overview](#api-overview)
+    - [Auth (`/api/auth`)](#auth-apiauth)
+    - [Users (`/api/users`)](#users-apiusers)
+    - [Conversations (`/api/conversations`)](#conversations-apiconversations)
+    - [Messages (`/api/conversations/{conversationId}/messages`)](#messages-apiconversationsconversationidmessages)
+    - [Files (`/api/files`)](#files-apifiles)
+    - [SignalR Hub (`/hubs/chat`)](#signalr-hub-hubschat)
+  - [Usage Examples](#usage-examples)
+  - [Tests](#tests)
+
 ## Key Features
 - JWT bearer auth with hashed refresh tokens, BCrypt password hashing, and session tracking.
 - Private and group conversations with participant add/remove flows.
