@@ -1,22 +1,22 @@
-using Chatty.BE.Domain.Entities;
+using Chatty.BE.Application.DTOs.Users;
 
 namespace Chatty.BE.Application.Interfaces.Services;
 
 public interface IUserService
 {
-    Task<User?> GetByIdAsync(Guid userId, CancellationToken ct = default);
+    Task<UserDto?> GetByIdAsync(Guid userId, CancellationToken ct = default);
 
-    Task<User?> GetByUserNameAsync(string userName, CancellationToken ct = default);
+    Task<UserDto?> GetByUserNameAsync(string userName, CancellationToken ct = default);
 
-    Task<User?> GetByEmailAsync(string email, CancellationToken ct = default);
+    Task<UserDto?> GetByEmailAsync(string email, CancellationToken ct = default);
 
-    Task<IReadOnlyList<User>> SearchUsersAsync(string keyword, CancellationToken ct = default);
+    Task<IReadOnlyList<UserDto>> SearchUsersAsync(string keyword, CancellationToken ct = default);
 
     Task<bool> IsEmailTakenAsync(string email, CancellationToken ct = default);
 
     Task<bool> IsUserNameTakenAsync(string userName, CancellationToken ct = default);
 
-    Task<User> UpdateProfileAsync(
+    Task<UserDto> UpdateProfileAsync(
         Guid userId,
         string? displayName,
         string? avatarUrl,

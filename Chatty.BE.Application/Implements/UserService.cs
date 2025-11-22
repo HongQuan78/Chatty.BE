@@ -1,27 +1,44 @@
+using Chatty.BE.Application.DTOs.Users;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
-using Chatty.BE.Domain.Entities;
 
 namespace Chatty.BE.Application.Implements;
 
-public class UserService(IUserRepository userRepository, IUnitOfWork unitOfWork) : IUserService
+public class UserService(
+    IUserRepository userRepository,
+    IUnitOfWork unitOfWork,
+    IObjectMapper mapper
+) : IUserService
 {
     private readonly IUserRepository _userRepository = userRepository;
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
 
-    public Task<User?> GetByIdAsync(Guid userId, CancellationToken ct = default) =>
-        _userRepository.GetByIdAsync(userId, ct);
+    public async Task<UserDto?> GetByIdAsync(Guid userId, CancellationToken ct = default)
+    {
+        var result = await _userRepository.GetByIdAsync(userId, ct);
+        return result is null ? null : mapper.Map<UserDto>(result);
+    }
 
-    public Task<User?> GetByUserNameAsync(string userName, CancellationToken ct = default) =>
-        _userRepository.GetByUserNameAsync(userName, ct);
+    public async Task<UserDto?> GetByUserNameAsync(string userName, CancellationToken ct = default)
+    {
+        var result = await _userRepository.GetByUserNameAsync(userName, ct);
+        return result is null ? null : mapper.Map<UserDto>(result);
+    }
 
-    public Task<User?> GetByEmailAsync(string email, CancellationToken ct = default) =>
-        _userRepository.GetByEmailAsync(email, ct);
+    public async Task<UserDto?> GetByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var result = await _userRepository.GetByEmailAsync(email, ct);
+        return result is null ? null : mapper.Map<UserDto>(result);
+    }
 
-    public Task<IReadOnlyList<User>> SearchUsersAsync(
+    public async Task<IReadOnlyList<UserDto>> SearchUsersAsync(
         string keyword,
         CancellationToken ct = default
-    ) => _userRepository.SearchUsersAsync(keyword, ct);
+    )
+    {
+        var result = await _userRepository.SearchUsersAsync(keyword, ct);
+        return mapper.Map<List<UserDto>>(result);
+    }
 
     public Task<bool> IsEmailTakenAsync(string email, CancellationToken ct = default) =>
         _userRepository.IsEmailTakenAsync(email, ct);
@@ -29,7 +46,7 @@ public class UserService(IUserRepository userRepository, IUnitOfWork unitOfWork)
     public Task<bool> IsUserNameTakenAsync(string userName, CancellationToken ct = default) =>
         _userRepository.IsUserNameTakenAsync(userName, ct);
 
-    public async Task<User> UpdateProfileAsync(
+    public async Task<UserDto> UpdateProfileAsync(
         Guid userId,
         string? displayName,
         string? avatarUrl,
@@ -60,6 +77,6 @@ public class UserService(IUserRepository userRepository, IUnitOfWork unitOfWork)
         _userRepository.Update(user);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return user;
+        return mapper.Map<UserDto>(user);
     }
 }

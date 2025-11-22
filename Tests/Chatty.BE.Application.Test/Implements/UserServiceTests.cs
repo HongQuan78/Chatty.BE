@@ -1,4 +1,5 @@
 using Chatty.BE.Application.Implements;
+using Chatty.BE.Application.DTOs.Users;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
@@ -10,8 +11,26 @@ public class UserServiceTests
 {
     private readonly Mock<IUserRepository> _userRepository = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IObjectMapper> _objectMapper = new();
 
-    private UserService CreateService() => new(_userRepository.Object, _unitOfWork.Object);
+    public UserServiceTests()
+    {
+        _objectMapper
+            .Setup(m => m.Map<UserDto>(It.IsAny<User>()))
+            .Returns<User>(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName,
+                Email = u.Email,
+                DisplayName = u.DisplayName,
+                AvatarUrl = u.AvatarUrl,
+                Bio = u.Bio,
+                CreatedAt = u.CreatedAt,
+            });
+    }
+
+    private UserService CreateService() =>
+        new(_userRepository.Object, _unitOfWork.Object, _objectMapper.Object);
 
     [Fact]
     public async Task UpdateProfileAsync_ShouldTrimValuesAndPersist_WhenInputsProvided()
@@ -44,7 +63,6 @@ public class UserServiceTests
         Assert.Equal("New Name", result.DisplayName);
         Assert.Equal("https://cdn/avatar.png", result.AvatarUrl);
         Assert.Equal("Hello world", result.Bio);
-        Assert.NotNull(result.UpdatedAt);
 
         _userRepository.Verify(r => r.Update(user), Times.Once);
         _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
