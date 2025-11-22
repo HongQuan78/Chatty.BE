@@ -1,9 +1,11 @@
 using Chatty.BE.API.Contracts.Files;
 using Chatty.BE.Application.Interfaces.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Chatty.BE.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class FilesController(IFileStorageService fileStorageService) : ControllerBase

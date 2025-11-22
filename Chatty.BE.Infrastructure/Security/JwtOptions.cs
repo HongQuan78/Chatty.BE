@@ -4,7 +4,7 @@ public sealed class JwtOptions
 {
     public string Issuer { get; init; } = "Chatty.BE";
 
-    public string Audience { get; init; } = "Chatty.BE.Clients";
+    public string Audience { get; init; } = "Chatty.Clients";
 
     public TimeSpan AccessTokenLifetime { get; init; } = TimeSpan.FromMinutes(15);
 
