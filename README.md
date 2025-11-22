@@ -1,232 +1,160 @@
 # Chatty.BE
 
-> Backend for a real-time messaging experience built with ASP.NET Core, CQRS-inspired services, Entity Framework Core, and SignalR.
+Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provides JWT authentication with refresh tokens, private and group conversations, messaging with attachments, Cloudinary-based file uploads, and SignalR notifications, backed by SQL Server and Entity Framework Core.
 
-## Table of Contents
-- [Chatty.BE](#chattybe)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Architecture](#architecture)
-    - [Solution Layout](#solution-layout)
-    - [Layer Responsibilities](#layer-responsibilities)
-    - [Architecture Diagram](#architecture-diagram)
-    - [Message Flow](#message-flow)
-  - [Core Features](#core-features)
-  - [Technology Stack](#technology-stack)
-  - [Configuration](#configuration)
-    - [Environment Variables](#environment-variables)
-    - [Secrets \& Connection Strings](#secrets--connection-strings)
-  - [Local Development](#local-development)
-    - [Prerequisites](#prerequisites)
-    - [Database Setup](#database-setup)
-    - [Build \& Run](#build--run)
-    - [Swagger \& API Exploration](#swagger--api-exploration)
-    - [SignalR Hub](#signalr-hub)
-  - [Testing](#testing)
-  - [CI/CD](#cicd)
-  - [Frontend](#frontend)
+## Key Features
+- JWT bearer auth with hashed refresh tokens, BCrypt password hashing, and session tracking.
+- Private and group conversations with participant add/remove flows.
+- Messaging with attachments, unread counts, and per-user receipt tracking.
+- User profile lookup and updates plus keyword search.
+- Cloudinary-backed file upload endpoint that returns secure URLs for reuse in messages.
+- Real-time notifications over SignalR hub `/hubs/chat` for messages, read receipts, and participant changes.
+- Structured error handling middleware returning RFC7807 `ProblemDetails`.
+- Automated tests (xUnit) covering application services and API controllers.
 
-## Overview
-Chatty.BE is a layered .NET 10 solution that demonstrates a modular backend for chat applications. The system exposes REST APIs, real-time push notifications via SignalR, and a clean separation between Domain, Application, Infrastructure, and API layers. Patterns such as repositories, unit of work, CQRS-style DTOs, and service abstractions keep the code base testable and easy to evolve.
+## System Architecture
+- **API layer (`Chatty.BE.API`)**: ASP.NET Core controllers expose REST endpoints; Swagger configured for interactive docs; JWT authentication middleware; custom exception middleware; SignalR hub registration.
+- **Application layer (`Chatty.BE.Application`)**: DTOs, service interfaces, and service implementations for auth, conversations, messages, users; cross-cutting helpers (date/time, file validation).
+- **Domain layer (`Chatty.BE.Domain`)**: Entity models (`User`, `Conversation`, `Message`, `MessageAttachment`, `MessageReceipt`, `RefreshToken`) and enums (`MessageType`, `MessageStatus`).
+- **Infrastructure layer (`Chatty.BE.Infrastructure`)**: EF Core persistence (SQL Server), repository implementations, Unit of Work, AutoMapper profiles, JWT token provider, password hashing, Cloudinary file storage, SignalR notification service, dependency injection registration.
+- **Tests (`Tests`)**: xUnit projects for application services, API integration (in-memory EF Core), domain, and infrastructure components.
 
-## Architecture
-The backend is organized as a classic Onion/Hexagonal layout. Inner layers (Domain and Application) know nothing about outer technical details, while Infrastructure wires implementation details such as persistence, mappings, and SignalR hubs.
+## Project Structure
+- `Chatty.BE.API/` - Program/bootstrap, controllers, request contracts, middleware, Swagger setup, SignalR hub mapping.
+- `Chatty.BE.Application/` - DTOs, service interfaces, service implementations, helpers, and custom exceptions.
+- `Chatty.BE.Domain/` - Core entities and enums shared across layers.
+- `Chatty.BE.Infrastructure/` - EF Core DbContext/configurations, repositories, dependency injection, security (JWT, hashing), Cloudinary service, SignalR hub/client contracts, AutoMapper profile.
+- `Tests/` - `Chatty.BE.API.IntegrationTests`, `Chatty.BE.Application.Test`, `Chatty.BE.Domain.Tests`, `Chatty.BE.Infrastructure.Tests`.
+- `.github/workflows/dotnet-auto-unit-test.yml` - CI workflow for automated tests.
 
-### Solution Layout
-```text
-Chatty.BE/
-|-- Chatty.BE.Domain/                # Entities, enums, and validation attributes
-|-- Chatty.BE.Application/           # DTOs, contracts, and service implementations
-|-- Chatty.BE.Infrastructure/        # EF Core DbContext, repositories, mappings, SignalR
-|-- Chatty.BE.API/                   # ASP.NET Core Web API entry point & controllers
-|-- Tests/
-|   |-- Chatty.BE.Domain.Tests/      # Entity-focused unit tests
-|   |-- Chatty.BE.Application.Test/  # Service tests (xUnit + Moq)
-|   `-- Chatty.BE.Infrastructure.Tests/ # EF-backed repository specs
-`-- .github/workflows/               # GitHub Actions pipeline
-```
+## Tech Stack
+- .NET 10, ASP.NET Core Web API, SignalR.
+- Entity Framework Core (SQL Server, InMemory for tests), AutoMapper.
+- JWT authentication (`Microsoft.AspNetCore.Authentication.JwtBearer`, custom `JwtTokenProvider`).
+- BCrypt password hashing (`BCrypt.Net-Next`).
+- Cloudinary file uploads (`CloudinaryDotNet`).
+- Swagger / OpenAPI (`Swashbuckle.AspNetCore`).
+- Testing: xUnit, `Microsoft.AspNetCore.Mvc.Testing`, `Microsoft.NET.Test.Sdk`, coverlet.
 
-### Layer Responsibilities
-| Layer | Responsibilities | Key Namespaces |
-| --- | --- | --- |
-| **Domain** | Core entities (`User`, `Conversation`, `Message`, `MessageAttachment`, `MessageReceipt`) and enums (`MessageStatus`, `MessageType`). Validation is mostly via data annotations. | `Chatty.BE.Domain.Entities`, `Chatty.BE.Domain.Enums` |
-| **Application** | Contracts (`Interfaces.Repositories`, `Interfaces.Services`), DTOs for commands/queries (e.g., `GetConversationsForUserQuery`, `SendMessageCommand`), and services (`AuthService`, `ConversationService`, `MessageService`, `UserService`). Applies business rules such as participant validation, duplicate checks, and password hashing. | `Chatty.BE.Application.*` |
-| **Infrastructure** | EF Core DbContext (`ChatDbContext`), entity configurations, repository implementations, AutoMapper profile, `UnitOfWork`, and SignalR messaging through `ChatHub` and `SignalRNotificationService`. Dependency injection is centralized in `InfrastructureServiceRegistration`. | `Chatty.BE.Infrastructure.*` |
-| **API** | ASP.NET Core Web API host (`Program.cs`), controller endpoints, Swagger configuration, and SignalR hub registration. Currently contains a sample controller; more endpoints can be added that call Application services via DI. | `Chatty.BE.API` |
-| **Tests** | Independent test projects per layer ensure fast feedback. Application tests mock repositories with Moq to validate service behavior, Infrastructure tests use EF Core InMemory provider, and Domain tests cover entity invariants. | `Tests/*` |
+## Getting Started
+1. Install .NET 10 SDK and access to SQL Server.
+2. From the repository root, restore packages:
+   ```bash
+   dotnet restore
+   ```
+3. Create a `.env` in `Chatty.BE.API/` or set environment variables (see Configuration).
+4. Apply EF Core migrations to your database:
+   ```bash
+   dotnet ef database update --project Chatty.BE.Infrastructure --startup-project Chatty.BE.API
+   ```
+   (Install the `dotnet-ef` tool if needed: `dotnet tool install --global dotnet-ef`.)
+5. Run the API:
+   ```bash
+   dotnet run --project Chatty.BE.API
+   ```
+6. Open Swagger UI at `https://localhost:5001/swagger` (or the port shown on startup).
 
-### Architecture Diagram
-```mermaid
-flowchart LR
-    subgraph API
-        Controllers
-        SignalRHub[SignalR Hub]
-    end
-    subgraph Application
-        Services[Auth/Conversation/Message/User Services]
-        DTOs[Commands & Queries]
-    end
-    subgraph Domain
-        Entities((Entities & Enums))
-    end
-    subgraph Infrastructure
-        Repos[Repositories + UnitOfWork]
-        Db[(ChatDbContext / SQL Server)]
-        Mapper[AutoMapper Profile]
-        Realtime[SignalRNotificationService]
-    end
-    Controllers --> Services
-    SignalRHub --> Realtime
-    Services --> Repos
-    Services --> DTOs
-    Repos --> Db
-    Repos --> Entities
-    Mapper --> Services
-    Realtime --> SignalRHub
-```
-
-### Message Flow
-The Send Message use case blends synchronous persistence with asynchronous SignalR notifications.
-
-```mermaid
-sequenceDiagram
-    participant API as API Controller
-    participant App as MessageService
-    participant Repo as MessageRepository & UnitOfWork
-    participant Hub as SignalRNotificationService
-    participant Client as Connected Clients
-
-    API->>App: SendMessageAsync(conversationId, senderId, payload)
-    App->>Repo: Validate conversation & participants\nPersist Message + Attachments + Receipts
-    Repo-->>App: Saved entities
-    App->>Hub: NotifyMessageSentAsync(message, recipients)
-    Hub-->>Client: receiveMessage + group notifications
-```
-
-## Core Features
-- **Authentication** - `AuthController` exposes register/login/change-password/logout endpoints built on BCrypt hashing and JWT access/refresh tokens.
-- **Session Management** - Refresh tokens are persisted with IP auditing, reuse detection, and a JWT-guarded "logout all sessions" flow powered by `ClaimsPrincipalExtensions.GetUserId()`.
-- **User Directory** - Fetch by id/email/username, keyword search, and profile updates with trimming & optional fields.
-- **Conversations** - Private and group conversation workflows, participant management, membership checks, and transaction-backed creation.
-- **Messaging** - Sending messages with attachments, tracking read receipts, unread counts, and conversation `UpdatedAt` updates.
-- **Real-time Notifications** - SignalR hub broadcasting message, read receipt, and participant events.
-- **Persistence Layer** - Repository + Unit of Work abstractions on top of EF Core with SQL Server provider and AutoMapper integration.
-- **Automated Testing** - xUnit suites for domain models, services (Moq), repositories (EF Core InMemory), and API integration tests that execute the real authentication stack end-to-end.
-## Technology Stack
-| Category | Technologies |
-| --- | --- |
-| Runtime | .NET 10, ASP.NET Core minimal hosting |
-| API Tooling | Swashbuckle (Swagger UI/OpenAPI), Microsoft.AspNetCore.OpenApi |
-| Persistence | Entity Framework Core 10, SQL Server provider, Fluent configurations, EF migrations |
-| Data Access Patterns | Repository pattern, Unit of Work, AutoMapper |
-| Real-time | SignalR Hub + strongly typed `IChatClient` |
-| Testing | xUnit, Moq, Microsoft.NET.Test.Sdk, coverlet.collector, Microsoft.AspNetCore.Mvc.Testing |
-| CI/CD | GitHub Actions (`dotnet-auto-unit-test.yml`) running restore + build + test with code coverage |
 ## Configuration
+Configuration is read from environment variables (preferred) or `appsettings.*`. Key settings:
 
-### Environment Variables
-| Variable | Description | Default |
-| --- | --- | --- |
-| `ASPNETCORE_ENVIRONMENT` | Hosting environment flag controlling Swagger/UI and configuration binding. | `Development` |
-| `DEFAULT_CONNECTION` | SQL Server connection string consumed by `ChatDbContext`. | Defined in the local `.env` file |
-| `JWT_SECRET` / `JWT_PRIVATE_KEY` | Symmetric or RSA key material used to sign JWT access tokens (set exactly one). | _required_ |
-| `JWT_ISSUER` / `JWT_AUDIENCE` | Token issuer/audience validated during authentication. | `Chatty.BE` / `Chatty.BE.Clients` |
-| `JWT_EXPIRATION_MINUTES` | Optional override for access token lifetime in minutes. | `15` |
-| `JWT_REFRESH_DAYS` | Optional override for refresh token lifetime in days. | `30` |
-| `Logging__LogLevel__*` | Standard ASP.NET Core logging knobs. | See `appsettings*.json` |
-### Secrets & Connection Strings
-1. Create a `.env` file at the repository root (a template is shown below) and set `DEFAULT_CONNECTION` to your SQL Server instance.
-2. The API bootstrapper loads the `.env` file automatically via `DotNetEnv` and forwards the value to `ConnectionStrings:DefaultConnection`.
-3. For production, **do not** store connection strings in source. Use platform-managed secrets (Key Vault, AWS Secrets Manager, etc.).
-4. Ensure the SQL Server user has rights to create the `ChattyDb` database if you plan to run migrations locally.
+| Setting | Description |
+| --- | --- |
+| `DEFAULT_CONNECTION` or `ConnectionStrings__DefaultConnection` | SQL Server connection string used by EF Core. |
+| `JWT_SECRET` | Symmetric key for signing JWT access tokens (required if no RSA keys). |
+| `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` | PEM-encoded RSA keys for signing/validation (optional alternative to `JWT_SECRET`). |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | Token issuer/audience; defaults to `Chatty.BE` / `Chatty.BE.Clients`. |
+| `ACCESS_TOKEN_EXP_SECONDS` | Access token lifetime in seconds (default 900). |
+| `REFRESH_TOKEN_EXP_SECONDS` | Refresh token lifetime in seconds (default 2592000 = 30 days). |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Cloudinary credentials for uploads. |
+| `CLOUDINARY_FOLDER` | Optional Cloudinary folder/prefix. |
 
-Example `.env`:
+Example `.env` for local development (use your own secrets):
+```env
+DEFAULT_CONNECTION=Server=localhost;Database=ChattyDb;User Id=sa;Password=Pass@word1;TrustServerCertificate=True;
+JWT_SECRET=your-256-bit-secret
+JWT_ISSUER=Chatty.BE
+JWT_AUDIENCE=Chatty.Clients
+ACCESS_TOKEN_EXP_SECONDS=900
+REFRESH_TOKEN_EXP_SECONDS=2592000
+CLOUDINARY_CLOUD_NAME=your-cloud
+CLOUDINARY_API_KEY=your-key
+CLOUDINARY_API_SECRET=your-secret
+```
+
+## Running & Building
+- Build solution: `dotnet build Chatty.BE.sln`
+- Run API: `dotnet run --project Chatty.BE.API`
+- Run all tests: `dotnet test`
+
+## API Overview
+Authentication uses Bearer JWT. Endpoints marked [auth] require an access token in `Authorization: Bearer <token>`.
+
+### Auth (`/api/auth`)
+- `POST /register` - Register user with `userName`, `email`, `password`; returns user identity data.
+- `POST /login` - Returns `accessToken`, `refreshToken`, and expiration windows.
+- `POST /change-password` - Update password for a given `userId`; forbids when caller is not that user. *[No `[Authorize]` attribute applied; relies on caller-provided `UserId`]*.
+- `POST /logout` - Revokes a specific refresh token for `userId`.
+- `POST /refresh` - Exchanges refresh token for new access/refresh pair; revokes reused/expired tokens.
+- [auth] `POST /logout-all-sessions` - Revokes all refresh tokens for current user.
+- [auth] `GET /sessions` - Lists active (non-expired) refresh tokens for current user.
+
+### Users (`/api/users`)
+- [auth] `GET /{id}` - Get user by id.
+- [auth] `GET /by-username/{userName}` - Get user by username.
+- [auth] `GET /search?keyword=...` - Search by username/email/display name (case-insensitive LIKE).
+- [auth] `PUT /{id}` - Update current user profile (display name, avatar URL, bio); forbids updating others.
+
+### Conversations (`/api/conversations`)
+- [auth] `POST /private` - Create or return an existing private conversation between two users.
+- [auth] `POST /group` - Create group conversation with owner and participant ids.
+- [auth] `POST /{id}/participants` - Add participant to conversation.
+- [auth] `DELETE /{id}/participants/{userId}` - Remove participant.
+- [auth] `GET` - List conversations for `userId` (ordered by last activity).
+- [auth] `GET /{id}` - Get conversation with participants.
+
+### Messages (`/api/conversations/{conversationId}/messages`)
+- [auth] `POST /` - Send message; body includes `content`, `type` (`Text|Image|File`), optional attachments.
+- [auth] `GET /` - Paginated messages (`page`, `pageSize`).
+- [auth] `PUT /read` - Mark all conversation messages as read for current user.
+- [auth] `GET /unread-count` - Count unread messages for current user in the conversation.
+
+### Files (`/api/files`)
+- [auth] `POST /upload` - Multipart upload (`file` form field); returns `{ "fileUrl": "..." }` from Cloudinary.
+
+### SignalR Hub (`/hubs/chat`)
+- Groups: connection joins a group keyed by user id; server also broadcasts to conversation id groups.
+- Client methods exposed by `IChatClient`: `ReceiveMessage`, `MessagesRead(conversationId, readerUserId, messageIds)`, `UserJoinedConversation`, `UserLeftConversation`.
+
+## Usage Examples
+Login:
 ```bash
-DEFAULT_CONNECTION="Server=localhost\\SQLEXPRESS;Database=ChattyDb;Trusted_Connection=True;TrustServerCertificate=True;"
-JWT_SECRET="local-development-secret-change-me"
-JWT_ISSUER="Chatty.BE.Local"
-JWT_AUDIENCE="Chatty.BE.Clients"
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","password":"P@ssw0rd!"}'
 ```
 
-## Local Development
-
-### Prerequisites
-- [.NET SDK 10.0.x](https://dotnet.microsoft.com/en-us/download)
-- SQL Server (Developer/Express/localdb) with access to create databases
-- (Optional) Node/WebSocket client to test the SignalR hub
-- PowerShell or Bash shell
-
-### Database Setup
+Send a text message:
 ```bash
-# From the repository root
-dotnet tool install --global dotnet-ef   # if not already installed
-dotnet restore
-dotnet ef database update `
-  --project Chatty.BE.Infrastructure/Chatty.BE.Infrastructure.csproj `
-  --startup-project Chatty.BE.API/Chatty.BE.API.csproj
+curl -X POST http://localhost:5000/api/conversations/{conversationId}/messages \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"senderId":"<current-user-id>","content":"Hello","type":0,"attachments":[]}'
 ```
-The command uses migrations under `Chatty.BE.Infrastructure/Migrations` to create/update the `ChattyDb` schema.
 
-### Build & Run
+Mark conversation as read:
 ```bash
-# Restore once
-dotnet restore Chatty.BE.sln
-
-# Build everything
-dotnet build Chatty.BE.sln
-
-# Launch the API (with Swagger + SignalR hub)
-dotnet run --project Chatty.BE.API/Chatty.BE.API.csproj
+curl -X PUT http://localhost:5000/api/conversations/{conversationId}/messages/read \
+  -H "Authorization: Bearer <access_token>"
 ```
-Ensure your `.env` exports both `DEFAULT_CONNECTION` and JWT settings (`JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`) before running so token generation succeeds. Navigate to `https://localhost:5001` (or the port shown in the console) after the API boots.
 
-### Swagger & API Exploration
-Swagger is automatically enabled in `Development`. Visit:
-```
-https://localhost:5001/swagger
-```
-Use the interactive UI to explore endpoints such as `/api/test` and any future REST resources added on top of the Application services.
-
-### SignalR Hub
-- Hub route: `/hubs/chat`
-- Join logic: clients pass a `userId` query string or include a `sub` claim so `ChatHub` can place the connection into the appropriate user-specific group.
-- Events pushed via `IChatClient`: `ReceiveMessage`, `MessagesRead`, `UserJoinedConversation`, `UserLeftConversation`.
-
-## Testing
-Each layer owns its own test suite under `Tests/`.
-
+Upload file:
 ```bash
-# Run every test project
-dotnet test Chatty.BE.sln
-
-# Focus on application services
-dotnet test Tests/Chatty.BE.Application.Test/Chatty.BE.Application.Test.csproj
-
-# Hit the live AuthController via WebApplicationFactory + EF InMemory
-dotnet test Tests/Chatty.BE.API.IntegrationTests/Chatty.BE.API.IntegrationTests.csproj
+curl -X POST http://localhost:5000/api/files/upload \
+  -H "Authorization: Bearer <access_token>" \
+  -F "file=@/path/to/image.jpg"
 ```
-Application tests use Moq to validate repository interactions and AAA-style naming (`MethodName_ShouldExpected_WhenCondition`). Infrastructure tests rely on `Microsoft.EntityFrameworkCore.InMemory` for fast repository checks. API integration tests spin up the real ASP.NET Core host with a per-test in-memory database and assert every authentication endpoint (register, login, refresh, change password, logout, logout all sessions). Code coverage is collected via coverlet when invoked by CI.
 
-## CI/CD
-The GitHub Actions workflow `.github/workflows/dotnet-auto-unit-test.yml` runs on pushes and pull requests targeting `main` or `develop`:
-1. Checkout source
-2. Install .NET SDK 10
-3. `dotnet restore` the solution
-4. `dotnet build` in Release
-5. `dotnet test` with XPlat code coverage enabled
-
-Extend this pipeline with publishing, containerization, or deployment steps as the project matures.
-
-## Frontend
-A dedicated frontend is not included in this repository. Any web/mobile client can integrate by:
-1. Using the REST API for CRUD operations (after new controllers are added).
-2. Connecting to `/hubs/chat` via SignalR (JavaScript, .NET, Java, etc.) and joining the `userId` group to receive real-time updates.
-
-Contributions for a companion UI are welcome; keep environments decoupled by isolating the frontend in a sibling repository or a `Chatty.FE` folder.
-
-
-
-
-
-
-
+## Tests
+- Integration tests: `Tests/Chatty.BE.API.IntegrationTests` spin up the API with in-memory EF Core and exercise auth, conversations, and messaging controllers.
+- Application service tests: `Tests/Chatty.BE.Application.Test` cover AuthService, ConversationService, MessageService, UserService behavior.
+- Domain and infrastructure tests validate entities and repository behavior.
