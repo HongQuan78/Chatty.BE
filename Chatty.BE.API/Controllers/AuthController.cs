@@ -73,14 +73,21 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return NoContent();
     }
 
+    [Authorize]
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> LogoutAsync(
         [FromBody] LogoutRequest request,
         CancellationToken ct
     )
     {
+        var currentUserId = User.GetUserId();
+        if (request.UserId != currentUserId)
+        {
+            return Forbid();
+        }
         await _authService.LogoutAsync(
             request.UserId,
             request.RefreshToken,

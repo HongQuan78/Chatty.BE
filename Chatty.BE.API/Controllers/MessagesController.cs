@@ -9,12 +9,16 @@ namespace Chatty.BE.API.Controllers;
 [ApiController]
 [Route("api/conversations/{conversationId:guid}/messages")]
 [Authorize]
-public sealed class MessagesController(IMessageService messageService) : ControllerBase
+public sealed class MessagesController(
+    IMessageService messageService,
+    IConversationService conversationService
+) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> SendMessage(
         Guid conversationId,
         [FromBody] SendMessageRequest request,
@@ -22,7 +26,21 @@ public sealed class MessagesController(IMessageService messageService) : Control
     )
     {
         var currentUserId = User.GetUserId();
+        if (currentUserId != request.SenderId)
+        {
+            return Forbid();
+        }
         if (request.SenderId != Guid.Empty && request.SenderId != currentUserId)
+        {
+            return Forbid();
+        }
+
+        var isParticipant = await conversationService.UserIsInConversationAsync(
+            conversationId,
+            currentUserId,
+            ct
+        );
+        if (!isParticipant)
         {
             return Forbid();
         }
@@ -54,6 +72,17 @@ public sealed class MessagesController(IMessageService messageService) : Control
             return BadRequest("Page and pageSize must be positive.");
         }
 
+        var currentUserId = User.GetUserId();
+        var isParticipant = await conversationService.UserIsInConversationAsync(
+            conversationId,
+            currentUserId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+
         var messages = await messageService.GetMessagesAsync(conversationId, page, pageSize, ct);
         return Ok(messages);
     }
@@ -64,6 +93,16 @@ public sealed class MessagesController(IMessageService messageService) : Control
     public async Task<IActionResult> MarkAsRead(Guid conversationId, CancellationToken ct)
     {
         var currentUserId = User.GetUserId();
+        var isParticipant = await conversationService.UserIsInConversationAsync(
+            conversationId,
+            currentUserId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+
         await messageService.MarkConversationAsReadAsync(conversationId, currentUserId, ct);
         return NoContent();
     }
@@ -74,11 +113,21 @@ public sealed class MessagesController(IMessageService messageService) : Control
     public async Task<IActionResult> GetUnreadCount(Guid conversationId, CancellationToken ct)
     {
         var currentUserId = User.GetUserId();
+        var isParticipant = await conversationService.UserIsInConversationAsync(
+            conversationId,
+            currentUserId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+
         var count = await messageService.CountUnreadMessagesAsync(
             conversationId,
             currentUserId,
             ct
         );
-        return Ok(new { Count = count });
+        return Ok(new GetUnreadCount { Count = count });
     }
 }
