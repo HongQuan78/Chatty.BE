@@ -113,14 +113,22 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
     {
         var session = await RegisterAndLoginAsync();
 
-        var logoutResponse = await _client.PostAsJsonAsync(
-            "/api/auth/logout",
-            new LogoutRequest
-            {
-                UserId = session.Login.UserId,
-                RefreshToken = session.Login.RefreshToken,
-            }
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout")
+        {
+            Content = JsonContent.Create(
+                new LogoutRequest
+                {
+                    UserId = session.Login.UserId,
+                    RefreshToken = session.Login.RefreshToken,
+                }
+            ),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            session.Login.AccessToken
         );
+
+        var logoutResponse = await _client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NoContent, logoutResponse.StatusCode);
 

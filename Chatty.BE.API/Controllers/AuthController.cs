@@ -77,6 +77,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> LogoutAsync(
         [FromBody] LogoutRequest request,
