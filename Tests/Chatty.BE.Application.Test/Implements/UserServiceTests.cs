@@ -1,5 +1,5 @@
-using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.DTOs.Users;
+using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;

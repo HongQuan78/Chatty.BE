@@ -1,28 +1,36 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
 namespace Chatty.BE.Infrastructure.SignalR;
 
-public class ChatHub : Hub<IChatClient>
+[Authorize]
+public sealed class ChatHub(ILogger<ChatHub> logger) : Hub<IChatClient>
 {
-    // Gợi ý: nhóm theo UserId để gửi riêng từng user
+    private readonly ILogger<ChatHub> _logger = logger;
+
     public override async Task OnConnectedAsync()
     {
-        // Ví dụ: lấy userId từ Claims hoặc query string
-        var userId =
-            Context.User?.FindFirst("sub")?.Value
-            ?? Context.GetHttpContext()?.Request.Query["userId"].ToString();
-
-        if (!string.IsNullOrEmpty(userId))
+        var userId = GetUserId();
+        if (userId is null)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+            _logger.LogWarning("Connection rejected: missing or invalid user id.");
+            Context.Abort();
+            return;
         }
 
+        await Groups.AddToGroupAsync(Context.ConnectionId, userId);
         await base.OnConnectedAsync();
     }
 
-    public override async Task OnDisconnectedAsync(Exception? exception)
+    private string? GetUserId()
     {
-        // Có thể remove khỏi group nếu muốn, tuỳ logic
-        await base.OnDisconnectedAsync(exception);
+        var idValue =
+            Context.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return Guid.TryParse(idValue, out var parsed) ? parsed.ToString() : null;
     }
 }
