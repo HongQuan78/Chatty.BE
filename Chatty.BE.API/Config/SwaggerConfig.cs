@@ -17,11 +17,30 @@ public static class SwaggerServiceExtensions
                 new OpenApiSecurityScheme
                 {
                     Name = "Authorization",
-                    Type = SecuritySchemeType.ApiKey,
-                    Scheme = "Bearer",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer",
                     BearerFormat = "JWT",
                     In = ParameterLocation.Header,
-                    Description = "Enter the token: Bearer {token}",
+                    Description = "Enter: Bearer {token}",
+                }
+            );
+            c.AddSecurityRequirement(
+                new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer",
+                            },
+                            Scheme = "bearer",
+                            Name = "Bearer",
+                            In = ParameterLocation.Header,
+                        },
+                        Array.Empty<string>()
+                    },
                 }
             );
         });
