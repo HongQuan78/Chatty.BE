@@ -12,17 +12,20 @@ internal static class CloudinaryOptionsBuilder
             CloudName = ConfigurationHelpers.GetString(
                 configuration,
                 "CLOUDINARY_CLOUD_NAME",
-                "Cloudinary:CloudName"
+                "Cloudinary:CloudName",
+                required: false
             ),
             ApiKey = ConfigurationHelpers.GetString(
                 configuration,
                 "CLOUDINARY_API_KEY",
-                "Cloudinary:ApiKey"
+                "Cloudinary:ApiKey",
+                required: false
             ),
             ApiSecret = ConfigurationHelpers.GetString(
                 configuration,
                 "CLOUDINARY_API_SECRET",
-                "Cloudinary:ApiSecret"
+                "Cloudinary:ApiSecret",
+                required: false
             ),
             Folder = ConfigurationHelpers.GetString(
                 configuration,

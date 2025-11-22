@@ -1,52 +1,16 @@
-using System.IO;
-using System.Text;
 using Chatty.BE.API.Config;
 using Chatty.BE.API.Middleware;
 using Chatty.BE.Infrastructure.DependencyInjection;
 using Chatty.BE.Infrastructure.SignalR;
-using DotNetEnv;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var envFilePath = Path.Combine(builder.Environment.ContentRootPath, ".env");
-if (File.Exists(envFilePath))
-{
-    Env.Load(envFilePath);
-}
-
-var defaultConnection = Environment.GetEnvironmentVariable("DEFAULT_CONNECTION");
-if (!string.IsNullOrWhiteSpace(defaultConnection))
-{
-    builder.Configuration["ConnectionStrings:DefaultConnection"] = defaultConnection;
-}
+EnvironmentLoader.Load(builder);
 
 // Add services
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSwaggerConfig();
-builder
-    .Services.AddAuthentication("Bearer")
-    .AddJwtBearer(
-        "Bearer",
-        options =>
-        {
-            var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET");
-            var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
-            var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
-
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = issuer,
-                ValidAudience = audience,
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret!)),
-            };
-        }
-    );
+builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddControllers();
 
 // Swagger BEFORE Build()
@@ -69,6 +33,11 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseRouting();
 
+var disableHttpLogging = Environment.GetEnvironmentVariable("DISABLE_HTTP_LOGGING");
+if (!string.Equals(disableHttpLogging, "1", StringComparison.OrdinalIgnoreCase))
+{
+    app.UseMiddleware<LoggingMiddleware>();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -79,5 +48,3 @@ app.MapHub<ChatHub>("/hubs/chat");
 app.MapControllers();
 
 app.Run();
-
-public partial class Program;

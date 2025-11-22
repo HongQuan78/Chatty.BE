@@ -31,7 +31,9 @@ internal static class ConfigurationHelpers
 
         if (required)
         {
-            throw new InvalidOperationException($"Missing configuration value for {envKey}/{configKey}.");
+            throw new InvalidOperationException(
+                $"Missing configuration value for {envKey}/{configKey}."
+            );
         }
 
         return string.Empty;

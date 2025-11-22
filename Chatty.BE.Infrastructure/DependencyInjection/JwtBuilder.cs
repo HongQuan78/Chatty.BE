@@ -44,20 +44,20 @@ internal static class JwtBuilder
                 required: false,
                 defaultValue: "Chatty.BE.Clients"
             ),
-            AccessTokenLifetime = TimeSpan.FromSeconds(
+            AccessTokenLifetime = TimeSpan.FromMinutes(
                 ConfigurationHelpers.GetInt(
                     configuration,
-                    "ACCESS_TOKEN_EXP_SECONDS",
-                    "Jwt:AccessTokenSeconds",
-                    900
+                    "JWT_EXPIRATION_MINUTES",
+                    "Jwt:AccessTokenMinutes",
+                    15
                 )
             ),
-            RefreshTokenLifetime = TimeSpan.FromSeconds(
+            RefreshTokenLifetime = TimeSpan.FromDays(
                 ConfigurationHelpers.GetInt(
                     configuration,
-                    "REFRESH_TOKEN_EXP_SECONDS",
-                    "Jwt:RefreshTokenSeconds",
-                    60 * 60 * 24 * 30
+                    "JWT_REFRESH_DAYS",
+                    "Jwt:RefreshTokenDays",
+                    30
                 )
             ),
             PrivateKey = privateKey,

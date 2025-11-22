@@ -23,6 +23,10 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("JWT_SECRET", "integration-test-secret-key-value");
         Environment.SetEnvironmentVariable("JWT_ISSUER", "Chatty.Tests");
         Environment.SetEnvironmentVariable("JWT_AUDIENCE", "Chatty.Tests.Clients");
+        Environment.SetEnvironmentVariable("CLOUDINARY_CLOUD_NAME", "dummy");
+        Environment.SetEnvironmentVariable("CLOUDINARY_API_KEY", "dummy");
+        Environment.SetEnvironmentVariable("CLOUDINARY_API_SECRET", "dummy");
+        Environment.SetEnvironmentVariable("DISABLE_HTTP_LOGGING", "1");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
