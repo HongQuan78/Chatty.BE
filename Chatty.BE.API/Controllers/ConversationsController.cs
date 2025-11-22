@@ -1,4 +1,5 @@
 using Chatty.BE.API.Contracts.Conversations;
+using Chatty.BE.API.Extensions;
 using Chatty.BE.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,11 +16,18 @@ public sealed class ConversationsController(IConversationService conversationSer
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreatePrivateConversation(
         [FromBody] CreatePrivateConversationRequest request,
         CancellationToken ct
     )
     {
+        var currentUserId = User.GetUserId();
+        if (request.UserAId != currentUserId && request.UserBId != currentUserId)
+        {
+            return Forbid();
+        }
+
         var conversation = await conversationService.CreatePrivateConversationAsync(
             request.UserAId,
             request.UserBId,
@@ -37,11 +45,18 @@ public sealed class ConversationsController(IConversationService conversationSer
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateGroupConversation(
         [FromBody] CreateGroupConversationRequest request,
         CancellationToken ct
     )
     {
+        var currentUserId = User.GetUserId();
+        if (request.OwnerId != currentUserId)
+        {
+            return Forbid();
+        }
+
         var conversation = await conversationService.CreateGroupConversationAsync(
             request.OwnerId,
             request.Name,
@@ -60,12 +75,25 @@ public sealed class ConversationsController(IConversationService conversationSer
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> AddParticipant(
         [FromRoute] Guid id,
         [FromBody] AddParticipantRequest request,
         CancellationToken ct
     )
     {
+        var conversation = await conversationService.GetByIdAsync(id, ct);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+
+        var currentUserId = User.GetUserId();
+        if (conversation.OwnerId != currentUserId)
+        {
+            return Forbid();
+        }
+
         await conversationService.AddParticipantAsync(id, request.UserId, ct);
         return NoContent();
     }
@@ -75,12 +103,25 @@ public sealed class ConversationsController(IConversationService conversationSer
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RemoveParticipant(
         [FromRoute] Guid id,
         [FromRoute] Guid userId,
         CancellationToken ct
     )
     {
+        var conversation = await conversationService.GetByIdAsync(id, ct);
+        if (conversation is null)
+        {
+            return NotFound();
+        }
+
+        var currentUserId = User.GetUserId();
+        if (conversation.OwnerId != currentUserId)
+        {
+            return Forbid();
+        }
+
         await conversationService.RemoveParticipantAsync(id, userId, ct);
         return NoContent();
     }
@@ -94,7 +135,16 @@ public sealed class ConversationsController(IConversationService conversationSer
         CancellationToken ct
     )
     {
-        var conversations = await conversationService.GetConversationsForUserAsync(userId, ct);
+        var currentUserId = User.GetUserId();
+        if (userId != Guid.Empty && userId != currentUserId)
+        {
+            return Forbid();
+        }
+
+        var conversations = await conversationService.GetConversationsForUserAsync(
+            currentUserId,
+            ct
+        );
         return Ok(conversations);
     }
 
@@ -103,6 +153,7 @@ public sealed class ConversationsController(IConversationService conversationSer
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetConversationById([FromRoute] Guid id, CancellationToken ct)
     {
         var conversation = await conversationService.GetByIdAsync(id, ct);
@@ -110,6 +161,18 @@ public sealed class ConversationsController(IConversationService conversationSer
         {
             return NotFound();
         }
+
+        var currentUserId = User.GetUserId();
+        var isParticipant = await conversationService.UserIsInConversationAsync(
+            id,
+            currentUserId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+
         return Ok(conversation);
     }
 }

@@ -47,6 +47,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return Ok(response);
     }
 
+    [Authorize]
     [HttpPost("change-password")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
