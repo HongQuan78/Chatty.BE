@@ -20,6 +20,20 @@ builder.Services.AddSwaggerGen();
 // SignalR
 builder.Services.AddSignalR();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(
+        "AllowFrontend",
+        policy =>
+        {
+            policy
+                .WithOrigins("http://localhost:4200")
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
+    );
+});
 var app = builder.Build();
 
 // Middleware
@@ -28,7 +42,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+app.UseCors("AllowFrontend");
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseRouting();
