@@ -9,4 +9,6 @@ public class UserDto
     public string? AvatarUrl { get; set; }
     public string? Bio { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? LatestLogin { get; set; }
+    public DateTime? LatestLogout { get; set; }
 }

@@ -53,6 +53,7 @@ public class AuthService(
             PasswordHash = passwordHasher.HashPassword(password),
             CreatedAt = utcNow,
             UpdatedAt = null,
+            LatestLogin = utcNow,
             IsDeleted = false,
         };
 
@@ -74,13 +75,18 @@ public class AuthService(
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user =
-            await userRepository.GetByEmailAsync(normalizedEmail, ct)
+            await userRepository.GetByEmailForUpdateAsync(normalizedEmail, ct)
             ?? throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
 
         if (!passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
             throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
         }
+
+        var utcNow = dateTimeProvider.UtcNow;
+        user.LatestLogin = utcNow;
+        user.UpdatedAt = utcNow;
+        userRepository.Update(user);
 
         var response = await IssueTokensAsync(user, ipAddress, ct);
         await unitOfWork.SaveChangesAsync(ct);
@@ -158,6 +164,7 @@ public class AuthService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
+        var utcNow = dateTimeProvider.UtcNow;
         var hashedToken = tokenProvider.ComputeHash(refreshToken);
         var storedToken = await refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct);
 
@@ -171,11 +178,20 @@ public class AuthService(
             return;
         }
 
-        storedToken.RevokedAt = dateTimeProvider.UtcNow;
+        storedToken.RevokedAt = utcNow;
         storedToken.ReasonRevoked = "User logout";
         storedToken.RevokedByIp = ipAddress;
 
         refreshTokenRepository.Update(storedToken);
+
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is not null)
+        {
+            user.LatestLogout = utcNow;
+            user.UpdatedAt = utcNow;
+            userRepository.Update(user);
+        }
+
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -300,6 +316,16 @@ public class AuthService(
 
     public async Task LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct)
     {
+        var utcNow = dateTimeProvider.UtcNow;
         await RevokeAllSessionsAsync(userId, "User logged out from all sessions", ipAddress, ct);
+
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is not null)
+        {
+            user.LatestLogout = utcNow;
+            user.UpdatedAt = utcNow;
+            userRepository.Update(user);
+            await unitOfWork.SaveChangesAsync(ct);
+        }
     }
 }

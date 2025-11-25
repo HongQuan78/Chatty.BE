@@ -1,4 +1,4 @@
-using Chatty.BE.Domain.Entities;
+using Chatty.BE.Application.DTOs.Messages;
 
 namespace Chatty.BE.Infrastructure.SignalR;
 
@@ -7,7 +7,7 @@ namespace Chatty.BE.Infrastructure.SignalR;
 /// </summary>
 public interface IChatClient
 {
-    Task ReceiveMessage(Message message);
+    Task ReceiveMessage(MessageDto message);
 
     Task MessagesRead(Guid conversationId, Guid readerUserId, IEnumerable<Guid> messageIds);
 

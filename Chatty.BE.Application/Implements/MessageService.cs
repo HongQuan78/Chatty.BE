@@ -104,11 +104,8 @@ public class MessageService(
         }
 
         var participants = await participantRepository.GetParticipantsAsync(conversationId, ct);
-        var recipientIds = participants
-            .Select(p => p.Id)
-            .Where(id => id != senderId)
-            .Distinct()
-            .ToList();
+        // Notify all participants (including sender) so multiple sessions for the same user also update in real-time.
+        var recipientIds = participants.Select(p => p.Id).Distinct().ToList();
 
         if (recipientIds.Count > 0)
         {

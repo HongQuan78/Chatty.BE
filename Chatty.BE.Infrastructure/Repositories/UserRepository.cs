@@ -16,6 +16,13 @@ public class UserRepository(ChatDbContext context)
         return _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email, ct);
     }
 
+    public Task<User?> GetByEmailForUpdateAsync(string email, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        return _context.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+    }
+
     public Task<User?> GetByUserNameAsync(string userName, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);

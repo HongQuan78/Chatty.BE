@@ -26,6 +26,9 @@ namespace Chatty.BE.Domain.Entities
         [MaxLength(512)]
         public string? Bio { get; set; }
 
+        public DateTime? LatestLogin { get; set; }
+        public DateTime? LatestLogout { get; set; }
+
         // Navigation: conversations that user participates in
         public virtual ICollection<ConversationParticipant> ConversationParticipants { get; set; } =
             new HashSet<ConversationParticipant>();

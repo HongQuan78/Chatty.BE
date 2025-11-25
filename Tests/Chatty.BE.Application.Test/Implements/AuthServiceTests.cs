@@ -94,7 +94,9 @@ public class AuthServiceTests
         };
 
         _userRepository
-            .Setup(r => r.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>()))
+            .Setup(r =>
+                r.GetByEmailForUpdateAsync("user@example.com", It.IsAny<CancellationToken>())
+            )
             .ReturnsAsync(storedUser);
         _passwordHasher.Setup(p => p.VerifyPassword("correct", "secure")).Returns(true);
 
@@ -129,7 +131,9 @@ public class AuthServiceTests
             PasswordHash = "secure",
         };
         _userRepository
-            .Setup(r => r.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>()))
+            .Setup(r =>
+                r.GetByEmailForUpdateAsync("user@example.com", It.IsAny<CancellationToken>())
+            )
             .ReturnsAsync(storedUser);
         _passwordHasher.Setup(p => p.VerifyPassword("wrong", "secure")).Returns(false);
         var service = CreateService();
