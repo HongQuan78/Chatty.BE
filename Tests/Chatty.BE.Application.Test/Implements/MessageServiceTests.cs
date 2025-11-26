@@ -120,7 +120,9 @@ public class MessageServiceTests
             r =>
                 r.AddRangeAsync(
                     It.Is<IEnumerable<MessageReceipt>>(list =>
-                        list.Count() == 1 && list.All(receipt => receipt.UserId == recipientId)
+                        list.Count() == 2
+                        && list.Any(receipt => receipt.UserId == recipientId)
+                        && list.Any(receipt => receipt.UserId == senderId)
                     ),
                     It.IsAny<CancellationToken>()
                 ),
@@ -132,7 +134,7 @@ public class MessageServiceTests
             n =>
                 n.NotifyMessageSentAsync(
                     It.Is<Message>(m => m.Id == message.Id),
-                    It.Is<IEnumerable<Guid>>(ids => ids.Single() == recipientId),
+                    It.Is<IEnumerable<Guid>>(ids => ids.OrderBy(x => x).SequenceEqual(new[] { senderId, recipientId }.OrderBy(x => x))),
                     It.IsAny<CancellationToken>()
                 ),
             Times.Once
