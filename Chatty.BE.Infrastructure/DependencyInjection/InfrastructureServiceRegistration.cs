@@ -55,6 +55,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IConversationService, ConversationService>();
         services.AddScoped<IMessageService, MessageService>();
+        services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<INotificationService, SignalRNotificationService>();
         services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();

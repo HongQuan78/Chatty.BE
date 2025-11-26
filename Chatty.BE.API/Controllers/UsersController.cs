@@ -9,7 +9,8 @@ namespace Chatty.BE.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class UsersController(IUserService userService) : ControllerBase
+public sealed class UsersController(IUserService userService, IPresenceService presenceService)
+    : ControllerBase
 {
     [HttpGet("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -51,6 +52,21 @@ public sealed class UsersController(IUserService userService) : ControllerBase
 
         var users = await userService.SearchUsersAsync(keyword, ct);
         return Ok(users);
+    }
+
+    [HttpGet("{id:guid}/presence")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPresence(Guid id, CancellationToken ct)
+    {
+        var presence = await presenceService.GetPresenceAsync(id, ct);
+        if (presence is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(presence);
     }
 
     [HttpPut("{id:guid}")]

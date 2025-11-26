@@ -25,7 +25,7 @@ namespace Chatty.BE.Domain.Entities
 
         [MaxLength(512)]
         public string? Bio { get; set; }
-
+        public DateTime? LastActive { get; set; }
         public DateTime? LatestLogin { get; set; }
         public DateTime? LatestLogout { get; set; }
 

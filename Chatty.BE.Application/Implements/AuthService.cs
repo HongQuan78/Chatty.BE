@@ -53,6 +53,7 @@ public class AuthService(
             PasswordHash = passwordHasher.HashPassword(password),
             CreatedAt = utcNow,
             UpdatedAt = null,
+            LastActive = utcNow,
             LatestLogin = utcNow,
             IsDeleted = false,
         };
@@ -85,6 +86,7 @@ public class AuthService(
 
         var utcNow = dateTimeProvider.UtcNow;
         user.LatestLogin = utcNow;
+        user.LastActive = utcNow;
         user.UpdatedAt = utcNow;
         userRepository.Update(user);
 
@@ -188,6 +190,7 @@ public class AuthService(
         if (user is not null)
         {
             user.LatestLogout = utcNow;
+            user.LastActive = utcNow;
             user.UpdatedAt = utcNow;
             userRepository.Update(user);
         }
@@ -323,6 +326,7 @@ public class AuthService(
         if (user is not null)
         {
             user.LatestLogout = utcNow;
+            user.LastActive = utcNow;
             user.UpdatedAt = utcNow;
             userRepository.Update(user);
             await unitOfWork.SaveChangesAsync(ct);
