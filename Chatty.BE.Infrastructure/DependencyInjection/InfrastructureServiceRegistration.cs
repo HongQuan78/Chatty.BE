@@ -49,7 +49,28 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenProvider, JwtTokenProvider>();
         services.AddSingleton<IObjectMapper, ObjectMapper>();
-        services.AddSingleton(CloudinaryOptionsBuilder.Build(configuration));
+
+        // Cloudinary options (resolved once)
+        var cloudinaryOptions = CloudinaryOptionsBuilder.Build(configuration);
+        services.AddSingleton(cloudinaryOptions);
+
+        // Conditionally register file storage strategy:
+        // - If Cloudinary settings are present, use CloudinaryFileStorageService
+        // - Otherwise, register a NoOpFileStorageService (Null Object) so app runs without .env
+        var hasCloudinaryCfg =
+            cloudinaryOptions is not null
+            && !string.IsNullOrWhiteSpace(cloudinaryOptions.CloudName)
+            && !string.IsNullOrWhiteSpace(cloudinaryOptions.ApiKey)
+            && !string.IsNullOrWhiteSpace(cloudinaryOptions.ApiSecret);
+
+        if (hasCloudinaryCfg)
+        {
+            services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
+        }
+        else
+        {
+            services.AddScoped<IFileStorageService, NoOpFileStorageService>();
+        }
 
         // Application services
         services.AddScoped<IAuthService, AuthService>();
@@ -58,7 +79,6 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<INotificationService, SignalRNotificationService>();
-        services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
 
         return services;
     }

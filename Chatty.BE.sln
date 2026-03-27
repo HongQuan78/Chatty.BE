@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.4.11612.150 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chatty.BE.API", "Chatty.BE.API\Chatty.BE.API.csproj", "{D7C358B6-5C94-4C98-837A-FF65424EA028}"
 EndProject
@@ -132,7 +132,12 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{11E31423-FFAB-4B3B-85FA-F3818184B0C1} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{1454341C-69B7-465F-9F3A-3FE809696994} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{36F6E18D-F414-4A87-BC6E-92294C828600} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{1CA8C836-C504-4DBA-B1B1-B10B7F1BA32D} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C4D4E80F-1EEF-42C8-9A35-9694DBDE0A7C}
 	EndGlobalSection
 EndGlobal

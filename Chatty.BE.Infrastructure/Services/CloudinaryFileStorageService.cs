@@ -8,7 +8,7 @@ namespace Chatty.BE.Infrastructure.Services;
 
 public sealed class CloudinaryFileStorageService(CloudinaryOptions options) : IFileStorageService
 {
-    private readonly Cloudinary _client = new Cloudinary(
+    private readonly Cloudinary _client = new(
         new Account(options.CloudName, options.ApiKey, options.ApiSecret)
     );
     private readonly CloudinaryOptions _options =
