@@ -10,21 +10,13 @@ namespace Chatty.BE.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<DateTime>(
-                name: "LastActive",
-                table: "Users",
-                type: "datetime2",
-                nullable: true
-            );
+            // No-op: LastActive is already added by 20251126160332_AddLastActiveToUsers.
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "LastActive",
-                table: "Users"
-            );
+            // No-op to keep rollback chain consistent with Up().
         }
     }
 }

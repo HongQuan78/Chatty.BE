@@ -1,6 +1,7 @@
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
+using Chatty.BE.Infrastructure.Config.Caching;
 using Chatty.BE.Infrastructure.Config;
 using Chatty.BE.Infrastructure.Config.Upload;
 using Chatty.BE.Infrastructure.Mappings;
@@ -8,6 +9,7 @@ using Chatty.BE.Infrastructure.Persistence;
 using Chatty.BE.Infrastructure.Repositories;
 using Chatty.BE.Infrastructure.Security;
 using Chatty.BE.Infrastructure.Services;
+using Chatty.BE.Infrastructure.Services.Caching;
 using Chatty.BE.Infrastructure.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -44,6 +46,22 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        var redisOptions = RedisCacheOptions.Build(configuration);
+        services.AddSingleton(redisOptions);
+
+        if (redisOptions.Enabled)
+        {
+            services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = redisOptions.Configuration;
+                options.InstanceName = redisOptions.InstanceName;
+            });
+        }
+        else
+        {
+            services.AddDistributedMemoryCache();
+        }
+
         services.AddSingleton(JwtBuilder.BuildJwtOptions(configuration));
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
@@ -74,10 +92,13 @@ public static class InfrastructureServiceRegistration
 
         // Application services
         services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IConversationService, ConversationService>();
-        services.AddScoped<IMessageService, MessageService>();
+        services.AddScoped<ConversationService>();
+        services.AddScoped<MessageService>();
+        services.AddScoped<UserService>();
+        services.AddScoped<IConversationService, CachedConversationService>();
+        services.AddScoped<IMessageService, CachedMessageService>();
         services.AddScoped<IPresenceService, PresenceService>();
-        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IUserService, CachedUserService>();
         services.AddScoped<INotificationService, SignalRNotificationService>();
 
         return services;
