@@ -1,8 +1,10 @@
 using Chatty.BE.API.Config;
 using Chatty.BE.API.Extensions;
 using Chatty.BE.API.Middleware;
+using Chatty.BE.Infrastructure.Config.Caching;
 using Chatty.BE.Infrastructure.DependencyInjection;
 using Chatty.BE.Infrastructure.SignalR;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,8 +17,18 @@ builder.Services
     .AddCustomCors("AllowFrontend")
     .AddControllers();
 
-//SignalR   
-builder.Services.AddSignalR();
+// SignalR with Redis backplane for multi-instance scale-out
+var redisOptions = RedisCacheOptions.Build(builder.Configuration);
+var signalRBuilder = builder.Services.AddSignalR();
+if (redisOptions.Enabled)
+{
+    signalRBuilder.AddStackExchangeRedis(redisOptions.Configuration, options =>
+    {
+        options.Configuration.ChannelPrefix = RedisChannel.Literal(
+            $"{redisOptions.InstanceName}signalr"
+        );
+    });
+}
 
 // API explorer / Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -50,7 +62,7 @@ if (!string.Equals(disableHttpLogging, "1", StringComparison.OrdinalIgnoreCase))
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 app.MapControllers();
 
 app.Run();

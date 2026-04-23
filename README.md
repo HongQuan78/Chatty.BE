@@ -29,7 +29,7 @@ Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provid
 - Messaging with attachments, unread counts, and per-user receipt tracking.
 - User profile lookup and updates plus keyword search.
 - Cloudinary-backed file upload endpoint that returns secure URLs for reuse in messages.
-- Real-time notifications over SignalR hub `/hubs/chat` for messages, read receipts, and participant changes.
+- Real-time notifications over authenticated SignalR hub `/hubs/chat` for messages, read receipts, and participant changes.
 - Distributed caching for read-heavy user, conversation, and message queries (Redis when enabled, in-memory fallback otherwise).
 - Structured error handling middleware returning RFC7807 `ProblemDetails`.
 - Automated tests (xUnit) covering application services and API controllers.
@@ -171,8 +171,10 @@ Authentication uses Bearer JWT. Endpoints marked [auth] require an access token 
 - [auth] `POST /upload` - Multipart upload (`file` form field); returns `{ "fileUrl": "..." }` from Cloudinary.
 
 ### SignalR Hub (`/hubs/chat`)
+- Authentication: hub connections require a valid JWT access token (`[Authorize]` + endpoint authorization policy).
 - Groups: connection joins a group keyed by user id; server also broadcasts to conversation id groups.
 - Client methods exposed by `IChatClient`: `ReceiveMessage`, `MessagesRead(conversationId, readerUserId, messageIds)`, `UserJoinedConversation`, `UserLeftConversation`.
+- Scale-out: when `RedisCache__Enabled=true`, SignalR uses Redis backplane (`Microsoft.AspNetCore.SignalR.StackExchangeRedis`) so events propagate across multiple API instances.
 
 ## Usage Examples
 Login:
