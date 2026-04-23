@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "cicd-expert": {
+      "source": "martinholovsky/claude-skills-generator",
+      "sourceType": "github",
+      "computedHash": "2a51008550e58b079b38dbbbf91bb3c45945a5b2d7f3ec638b34104694c7b715"
+    },
     "dotnet-backend-patterns": {
       "source": "wshobson/agents",
       "sourceType": "github",

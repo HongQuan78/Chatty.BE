@@ -13,6 +13,7 @@ Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provid
   - [Database \& Migrations](#database--migrations)
   - [Configuration](#configuration)
   - [Running \& Building](#running--building)
+  - [CI Pipeline](#ci-pipeline)
   - [API Overview](#api-overview)
     - [Auth (`/api/auth`)](#auth-apiauth)
     - [Users (`/api/users`)](#users-apiusers)
@@ -134,6 +135,17 @@ CLOUDINARY_API_SECRET=your-secret
 - Build solution: `dotnet build Chatty.BE.sln`
 - Run API: `dotnet run --project Chatty.BE.API`
 - Run all tests: `dotnet test`
+
+## CI Pipeline
+- Workflow: `.github/workflows/dotnet-auto-unit-test.yml`
+- Trigger: runs on every pull request.
+- Quality gates (in order):
+  1. `dotnet restore Chatty.BE.sln`
+  2. `dotnet format Chatty.BE.sln --verify-no-changes --severity warn --no-restore`
+  3. `dotnet build Chatty.BE.sln --configuration Release --no-restore`
+  4. `dotnet test Chatty.BE.sln --configuration Release --no-build --collect:"XPlat Code Coverage"`
+  5. `dotnet list Chatty.BE.sln package --vulnerable --include-transitive`
+- The workflow uses read-only token permissions and dependency caching via `actions/setup-dotnet`.
 
 ## API Overview
 Authentication uses Bearer JWT. Endpoints marked [auth] require an access token in `Authorization: Bearer <token>`.
