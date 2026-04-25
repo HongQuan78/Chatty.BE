@@ -33,7 +33,7 @@ public sealed class ChatHub(
             await Groups.AddToGroupAsync(Context.ConnectionId, GetUserGroup(userId.Value));
 
             await presenceService.UpdateLastActiveAsync(userId.Value, Context.ConnectionAborted);
-            
+
             logger.LogInformation("User {UserId} connected with ConnectionId {ConnectionId}", userId, Context.ConnectionId);
         }
         catch (Exception ex)
@@ -80,15 +80,15 @@ public sealed class ChatHub(
         {
             // Security check: Verify the user is actually a participant in this conversation
             var isInResult = await conversationService.UserIsInConversationAsync(conversationId, userId);
-            
+
             if (isInResult.IsSuccess && isInResult.Value)
             {
                 var groupName = GetConversationGroup(conversationId);
                 await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
-                
+
                 // Notify others in the conversation that a user is now active in this chat context
                 await Clients.Group(groupName).UserJoinedConversation(conversationId, userId);
-                
+
                 logger.LogDebug("User {UserId} joined conversation group {ConversationId}", userId, conversationId);
             }
             else
@@ -114,9 +114,9 @@ public sealed class ChatHub(
 
         var userId = GetUserId();
         var groupName = GetConversationGroup(conversationId);
-        
+
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
-        
+
         if (userId.HasValue)
         {
             await Clients.Group(groupName).UserLeftConversation(conversationId, userId.Value);
