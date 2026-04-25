@@ -28,12 +28,13 @@ Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provid
 - JWT bearer auth with hashed refresh tokens, BCrypt password hashing, and session tracking.
 - Private and group conversations with participant add/remove flows.
 - Messaging with attachments, unread counts, and per-user receipt tracking.
-- User profile lookup and updates plus keyword search.
+- User profile lookup and updates with optimized search (relevance-based ranking and pagination).
+- Real-time presence tracking with high-performance Redis caching, throttled DB synchronization, and automated startup recovery (Cache Warming).
 - Cloudinary-backed file upload endpoint that returns secure URLs for reuse in messages.
-- Real-time notifications over authenticated SignalR hub `/hubs/chat` for messages, read receipts, and participant changes.
-- Distributed caching for read-heavy user, conversation, and message queries (Redis when enabled, in-memory fallback otherwise).
+- Real-time notifications over authenticated SignalR hub `/hubs/chat` with hardened security and participant movement tracking.
+- Distributed caching for read-heavy user, conversation, and message queries (Redis-first with in-memory fallback).
 - Structured error handling middleware returning RFC7807 `ProblemDetails`.
-- Automated tests (xUnit) covering application services and API controllers.
+- Automated tests (xUnit) with 100% CI quality gate (formatting, security, and unit tests).
 
 ## System Architecture
 - **API layer (`Chatty.BE.API`)**: ASP.NET Core controllers expose REST endpoints; Swagger configured for interactive docs; JWT authentication middleware; custom exception middleware; SignalR hub registration.
@@ -176,14 +177,14 @@ CLOUDINARY_API_SECRET=your-secret
 - Run all tests: `dotnet test`
 
 ## CI Pipeline
-- Workflow: `.github/workflows/dotnet-auto-unit-test.yml`
-- Trigger: runs on every pull request.
-- Quality gates (in order):
+- Workflow: `.github/workflows/ci-pipeline.yml`
+- Trigger: runs on every pull request and push to main.
+- Quality gates (enforced via Docker SDK 10):
   1. `dotnet restore Chatty.BE.sln`
-  2. `dotnet format Chatty.BE.sln --verify-no-changes --severity warn --no-restore`
+  2. `dotnet format Chatty.BE.sln --verify-no-changes` (Ensures strict coding standards)
   3. `dotnet build Chatty.BE.sln --configuration Release --no-restore`
-  4. `dotnet test Chatty.BE.sln --configuration Release --no-build --collect:"XPlat Code Coverage"`
-  5. `dotnet list Chatty.BE.sln package --vulnerable --include-transitive`
+  4. `dotnet test Chatty.BE.sln --configuration Release --no-build`
+  5. `dotnet list Chatty.BE.sln package --vulnerable` (Security audit)
 - The workflow uses read-only token permissions and dependency caching via `actions/setup-dotnet`.
 
 ## API Overview
@@ -201,7 +202,7 @@ Authentication uses Bearer JWT. Endpoints marked [auth] require an access token 
 ### Users (`/api/users`)
 - [auth] `GET /{id}` - Get user by id.
 - [auth] `GET /by-username/{userName}` - Get user by username.
-- [auth] `GET /search?keyword=...` - Search by username/email/display name (case-insensitive LIKE).
+- [auth] `GET /search?keyword=...&pageIndex=1&pageSize=20` - Optimized search by username/email/display name with relevance ranking (Exact > Prefix > Substring).
 - [auth] `PUT /{id}` - Update current user profile (display name, avatar URL, bio); forbids updating others.
 
 ### Conversations (`/api/conversations`)
@@ -222,10 +223,12 @@ Authentication uses Bearer JWT. Endpoints marked [auth] require an access token 
 - [auth] `POST /upload` - Multipart upload (`file` form field); returns `{ "fileUrl": "..." }` from Cloudinary.
 
 ### SignalR Hub (`/hubs/chat`)
-- Authentication: hub connections require a valid JWT access token (`[Authorize]` + endpoint authorization policy).
-- Groups: connection joins a group keyed by user id; server also broadcasts to conversation id groups.
-- Client methods exposed by `IChatClient`: `ReceiveMessage`, `MessagesRead(conversationId, readerUserId, messageIds)`, `UserJoinedConversation`, `UserLeftConversation`.
-- Scale-out: when `RedisCache__Enabled=true`, SignalR uses Redis backplane (`Microsoft.AspNetCore.SignalR.StackExchangeRedis`) so events propagate across multiple API instances.
+- Authentication: hub connections require a valid JWT access token.
+- Groups: connection joins a private group keyed by user id; server also broadcasts to conversation groups.
+- Security: `JoinConversation` and `LeaveConversation` methods are hardened with membership verification.
+- Presence: uses `IPresenceService` with Redis for < 100ms latency. Includes a `PresenceWarmUpWorker` background service to restore state after system restarts.
+- Client methods exposed by `IChatClient`: `ReceiveMessage`, `MessagesRead`, `UserJoinedConversation`, `UserLeftConversation`, `UserPresenceChanged`.
+- Scale-out: when Redis is enabled, SignalR uses the Redis backplane to propagate events across multiple API instances.
 
 ## Usage Examples
 Login:
