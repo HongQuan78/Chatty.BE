@@ -28,7 +28,7 @@ public sealed class CloudinaryFileStorageService(
         var prefix = string.IsNullOrWhiteSpace(options.Folder)
             ? null
             : options.Folder!.Trim().Trim('/');
-        
+
         var publicId = prefix is null ? $"{Guid.NewGuid():N}" : $"{prefix}/{Guid.NewGuid():N}";
 
         // Note: Using ImageUploadParams as it works for most general files in Cloudinary 

@@ -76,7 +76,7 @@ public class ConversationService(
 
         var userAExists = await userRepository.ExistsAsync(userAId, ct);
         if (!userAExists) return Result<ConversationDto>.Failure($"User {userAId} was not found.", "NOT_FOUND");
-        
+
         var userBExists = await userRepository.ExistsAsync(userBId, ct);
         if (!userBExists) return Result<ConversationDto>.Failure($"User {userBId} was not found.", "NOT_FOUND");
 

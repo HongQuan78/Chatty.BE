@@ -150,7 +150,7 @@ public sealed class CachedConversationService(
         // This is a bit complex now because GetByIdAsync is user-specific.
         // We might want to use a broader invalidation strategy or just accept some stale data for GetByIdAsync.
         // For now, we'll invalidate the specific user's GetByIdAsync cache if we know the user.
-        
+
         foreach (var userId in userIds.Distinct())
         {
             await cache.RemoveAsync($"conversations:id:{conversationId:N}:user:{userId:N}", ct);

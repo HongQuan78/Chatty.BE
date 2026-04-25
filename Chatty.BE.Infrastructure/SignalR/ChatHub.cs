@@ -9,7 +9,7 @@ namespace Chatty.BE.Infrastructure.SignalR;
 
 [Authorize]
 public sealed class ChatHub(
-    ILogger<ChatHub> logger, 
+    ILogger<ChatHub> logger,
     IPresenceService presenceService,
     IConversationService conversationService)
     : Hub<IChatClient>
@@ -26,7 +26,7 @@ public sealed class ChatHub(
 
         // Add to individual user group for targeted notifications (e.g., "New Message")
         await Groups.AddToGroupAsync(Context.ConnectionId, userId.Value.ToString());
-        
+
         await presenceService.UpdateLastActiveAsync(userId.Value, Context.ConnectionAborted);
         await base.OnConnectedAsync();
     }

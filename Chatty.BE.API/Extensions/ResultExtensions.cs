@@ -45,7 +45,7 @@ public static class ResultExtensions
         {
             "NOT_FOUND" => controller.NotFound(new { error = result.Error }),
             "FORBIDDEN" => controller.Forbid(),
-            "VALIDATION_ERROR" when result.ValidationErrors != null => 
+            "VALIDATION_ERROR" when result.ValidationErrors != null =>
                 controller.ValidationProblem(new ValidationProblemDetails(result.ValidationErrors)),
             "BAD_REQUEST" => controller.BadRequest(new { error = result.Error }),
             "UNAUTHORIZED" => controller.Unauthorized(new { error = result.Error }),

@@ -19,7 +19,7 @@ public class Result
 
     public static Result Success() => new(true, null, null);
     public static Result Failure(string error, string? code = null) => new(false, error, code);
-    public static Result ValidationError(IDictionary<string, string[]> errors) 
+    public static Result ValidationError(IDictionary<string, string[]> errors)
         => new(false, "One or more validation errors occurred.", "VALIDATION_ERROR", errors);
 }
 
@@ -35,7 +35,7 @@ public class Result<T> : Result
 
     public static Result<T> Success(T value) => new(true, value, null, null);
     public new static Result<T> Failure(string error, string? code = null) => new(false, default, error, code);
-    public new static Result<T> ValidationError(IDictionary<string, string[]> errors) 
+    public new static Result<T> ValidationError(IDictionary<string, string[]> errors)
         => new(false, default, "One or more validation errors occurred.", "VALIDATION_ERROR", errors);
 
     public Result<TNew> Map<TNew>(Func<T, TNew> mapper) =>

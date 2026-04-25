@@ -66,7 +66,7 @@ public class PresenceService(
                 user.UpdatedAt = utcNow;
                 userRepository.Update(user);
                 await unitOfWork.SaveChangesAsync(ct);
-                
+
                 logger.LogDebug("Synced LastActive to database for user {UserId}", userId);
             }
         }
@@ -110,7 +110,7 @@ public class PresenceService(
 
         var lastActiveUtc = user.LastActive ?? user.LatestLogin ?? user.CreatedAt;
         var isOnline = (utcNow - lastActiveUtc) <= OnlineThreshold;
-        
+
         var result = new UserPresenceDto
         {
             UserId = user.Id,
