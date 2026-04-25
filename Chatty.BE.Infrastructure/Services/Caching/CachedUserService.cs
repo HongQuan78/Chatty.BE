@@ -73,26 +73,17 @@ public sealed class CachedUserService(
         return result;
     }
 
-    public async Task<Result<IReadOnlyList<UserDto>>> SearchUsersAsync(
+    public async Task<Result<PagedList<UserDto>>> SearchUsersAsync(
         string keyword,
+        int pageIndex = 1,
+        int pageSize = 20,
         CancellationToken ct = default
     )
     {
-        var normalized = keyword.Trim().ToLowerInvariant();
-        var key = $"users:search:{normalized}";
-        var cached = await cache.GetAsync<List<UserDto>>(key, ct);
-        if (cached is not null)
-        {
-            return Result<IReadOnlyList<UserDto>>.Success(cached);
-        }
-
-        var result = await inner.SearchUsersAsync(keyword, ct);
-        if (result.IsSuccess)
-        {
-            await cache.SetAsync(key, result.Value, _ttl, ct);
-        }
-
-        return result;
+        // Search results are highly dynamic and paginated. 
+        // For simplicity and to avoid cache bloat with numerous permutations of keyword/page, 
+        // we delegate directly to the inner service which uses an optimized database query.
+        return await inner.SearchUsersAsync(keyword, pageIndex, pageSize, ct);
     }
 
     public Task<Result<bool>> IsEmailTakenAsync(string email, CancellationToken ct = default) =>

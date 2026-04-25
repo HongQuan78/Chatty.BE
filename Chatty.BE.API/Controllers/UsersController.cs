@@ -33,18 +33,29 @@ public sealed class UsersController(IUserService userService, IPresenceService p
         return result.ToActionResult(this, user => Ok(user));
     }
 
+    /// <summary>
+    /// Searches for users with support for pagination and relevance optimization.
+    /// </summary>
+    /// <param name="keyword">Search term (matches UserName, Email, or DisplayName).</param>
+    /// <param name="pageIndex">1-based page index.</param>
+    /// <param name="pageSize">Number of results per page.</param>
+    /// <param name="ct">Cancellation token.</param>
     [HttpGet("search")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Search([FromQuery] string keyword, CancellationToken ct)
+    public async Task<IActionResult> Search(
+        [FromQuery] string keyword,
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(keyword))
         {
-            return Ok(Array.Empty<object>());
+            return Ok(new { items = Array.Empty<object>(), totalCount = 0 });
         }
 
-        var result = await userService.SearchUsersAsync(keyword, ct);
-        return result.ToActionResult(this, users => Ok(users));
+        var result = await userService.SearchUsersAsync(keyword, pageIndex, pageSize, ct);
+        return result.ToActionResult(this, pagedResult => Ok(pagedResult));
     }
 
     [HttpGet("{id:guid}/presence")]

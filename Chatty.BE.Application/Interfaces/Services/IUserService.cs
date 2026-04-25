@@ -11,7 +11,14 @@ public interface IUserService
 
     Task<Result<UserDto>> GetByEmailAsync(string email, CancellationToken ct = default);
 
-    Task<Result<IReadOnlyList<UserDto>>> SearchUsersAsync(string keyword, CancellationToken ct = default);
+    /// <summary>
+    /// Searches for users with pagination and relevance optimization.
+    /// </summary>
+    Task<Result<PagedList<UserDto>>> SearchUsersAsync(
+        string keyword,
+        int pageIndex = 1,
+        int pageSize = 20,
+        CancellationToken ct = default);
 
     Task<Result<bool>> IsEmailTakenAsync(string email, CancellationToken ct = default);
 

@@ -1,3 +1,4 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Infrastructure.Persistence;
@@ -42,26 +43,49 @@ public class UserRepository(ChatDbContext context)
         return _context.Users.AsNoTracking().AnyAsync(u => u.UserName == username, ct);
     }
 
-    public async Task<IReadOnlyList<User>> SearchUsersAsync(
+    public async Task<PagedList<User>> SearchUsersAsync(
         string keyword,
+        int pageIndex = 1,
+        int pageSize = 20,
         CancellationToken ct = default
     )
     {
         if (string.IsNullOrWhiteSpace(keyword))
         {
-            return [];
+            return PagedList<User>.Create([], 0, pageIndex, pageSize);
         }
 
-        var pattern = $"%{keyword.Trim()}%";
+        var searchTerm = keyword.Trim();
+        var containsPattern = $"%{searchTerm}%";
+        var startsWithPattern = $"{searchTerm}%";
 
-        return await _context
-            .Users.AsNoTracking()
+        // 1. Base Query with Filtering
+        var query = _context.Users.AsNoTracking()
             .Where(u =>
-                EF.Functions.Like(u.UserName, pattern)
-                || EF.Functions.Like(u.Email, pattern)
-                || (u.DisplayName != null && EF.Functions.Like(u.DisplayName, pattern))
+                EF.Functions.Like(u.UserName, containsPattern) ||
+                EF.Functions.Like(u.Email, containsPattern) ||
+                (u.DisplayName != null && EF.Functions.Like(u.DisplayName, containsPattern))
+            );
+
+        // 2. Optimized Sorting Algorithm (Relevance)
+        // We prioritize:
+        // - Exact matches (UserName or Email)
+        // - StartsWith matches (UserName or DisplayName)
+        // - Substring matches
+        var prioritizedQuery = query.OrderByDescending(u =>
+                (u.UserName == searchTerm || u.Email == searchTerm) ? 3 :
+                (EF.Functions.Like(u.UserName, startsWithPattern) || (u.DisplayName != null && EF.Functions.Like(u.DisplayName, startsWithPattern))) ? 2 :
+                1
             )
-            .OrderBy(u => u.DisplayName ?? u.UserName)
+            .ThenBy(u => u.DisplayName ?? u.UserName);
+
+        // 3. Execution with Keyset-style Paging
+        var totalCount = await query.CountAsync(ct);
+        var items = await prioritizedQuery
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(ct);
+
+        return PagedList<User>.Create(items, totalCount, pageIndex, pageSize);
     }
 }

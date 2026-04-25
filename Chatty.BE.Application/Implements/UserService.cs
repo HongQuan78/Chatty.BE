@@ -48,13 +48,18 @@ public class UserService(
         return Result<UserDto>.Success(mapper.Map<UserDto>(user));
     }
 
-    public async Task<Result<IReadOnlyList<UserDto>>> SearchUsersAsync(
+    public async Task<Result<PagedList<UserDto>>> SearchUsersAsync(
         string keyword,
+        int pageIndex = 1,
+        int pageSize = 20,
         CancellationToken ct = default
     )
     {
-        var users = await userRepository.SearchUsersAsync(keyword, ct);
-        return Result<IReadOnlyList<UserDto>>.Success(mapper.Map<List<UserDto>>(users));
+        var pagedUsers = await userRepository.SearchUsersAsync(keyword, pageIndex, pageSize, ct);
+
+        var pagedDtos = pagedUsers.Map(user => mapper.Map<UserDto>(user));
+
+        return Result<PagedList<UserDto>>.Success(pagedDtos);
     }
 
     public async Task<Result<bool>> IsEmailTakenAsync(string email, CancellationToken ct = default)
