@@ -60,6 +60,45 @@ Chatty.BE is a layered ASP.NET Core 10 backend for a chat application. It provid
 - Swagger / OpenAPI (`Swashbuckle.AspNetCore`).
 - Testing: xUnit, `Microsoft.AspNetCore.Mvc.Testing`, `Microsoft.NET.Test.Sdk`, coverlet.
 
+## Docker Development
+For a streamlined local development experience, you can use Docker Compose to run the API and all its dependencies (SQL Server, Redis).
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running.
+
+### Setup & Run
+1. **Configure Environment**: A root `.env` file is used by Docker Compose. You can customize it if needed.
+2. **Start Services**:
+   ```bash
+   # Using Git Bash / Linux / macOS
+   ./dev.sh up
+
+   # Using PowerShell (Windows)
+   .\dev.ps1 up
+   
+   # Or using Docker Compose directly
+   docker-compose -f docker-compose.dev.yml up -d
+   ```
+3. **Run Migrations**: Since the database is now running in a container, apply migrations to it from your host:
+   ```bash
+   # Using Git Bash / Linux / macOS
+   ./dev.sh migrate
+
+   # Using PowerShell (Windows)
+   .\dev.ps1 migrate
+   
+   # Or manually
+   dotnet ef database update --project Chatty.BE.Infrastructure --startup-project Chatty.BE.API
+   ```
+4. **Access the API**: The API will be available at `http://localhost:8080/swagger`.
+
+### Common Commands
+All commands below can be run with `./dev.sh <action>` or `.\dev.ps1 <action>`:
+- `logs`: Follow logs from all containers.
+- `build`: Rebuild the API container.
+- `down`: Stop and remove all containers.
+- `ps`: List running containers.
+
 ## Getting Started
 1. Install .NET 10 SDK and access to SQL Server.
 2. From the repository root, restore packages:

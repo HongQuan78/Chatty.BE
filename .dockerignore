@@ -1,0 +1,13 @@
+**/.bin/
+**/.obj/
+**/bin/
+**/obj/
+.git/
+.vs/
+.vscode/
+*.sln.user
+*.user
+.env
+Dockerfile
+docker-compose*
+node_modules/

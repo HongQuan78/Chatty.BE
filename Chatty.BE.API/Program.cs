@@ -5,6 +5,7 @@ using Chatty.BE.Infrastructure.Config.Caching;
 using Chatty.BE.Infrastructure.DependencyInjection;
 using Chatty.BE.Infrastructure.SignalR;
 using StackExchange.Redis;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerConfig();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<Chatty.BE.Infrastructure.Persistence.ChatDbContext>();
+    dbContext.Database.Migrate();
+}
 
 // Middleware
 app.UseMiddleware<ExceptionHandlingMiddleware>();
