@@ -8,24 +8,26 @@ using Microsoft.Extensions.Logging;
 namespace Chatty.BE.Infrastructure.SignalR;
 
 [Authorize]
-public sealed class ChatHub(ILogger<ChatHub> logger, IPresenceService presenceService)
+public sealed class ChatHub(
+    ILogger<ChatHub> logger, 
+    IPresenceService presenceService,
+    IConversationService conversationService)
     : Hub<IChatClient>
 {
-    private readonly ILogger<ChatHub> _logger = logger;
-    private readonly IPresenceService _presenceService = presenceService;
-
     public override async Task OnConnectedAsync()
     {
         var userId = GetUserId();
         if (userId is null)
         {
-            _logger.LogWarning("Connection rejected: missing or invalid user id.");
+            logger.LogWarning("Connection rejected: missing or invalid user id.");
             Context.Abort();
             return;
         }
 
+        // Add to individual user group for targeted notifications (e.g., "New Message")
         await Groups.AddToGroupAsync(Context.ConnectionId, userId.Value.ToString());
-        await _presenceService.UpdateLastActiveAsync(userId.Value, Context.ConnectionAborted);
+        
+        await presenceService.UpdateLastActiveAsync(userId.Value, Context.ConnectionAborted);
         await base.OnConnectedAsync();
     }
 
@@ -34,10 +36,36 @@ public sealed class ChatHub(ILogger<ChatHub> logger, IPresenceService presenceSe
         var userId = GetUserId();
         if (userId is not null)
         {
-            await _presenceService.UpdateLastActiveAsync(userId.Value, Context.ConnectionAborted);
+            await presenceService.UpdateLastActiveAsync(userId.Value, Context.ConnectionAborted);
         }
 
         await base.OnDisconnectedAsync(exception);
+    }
+
+    /// <summary>
+    /// Explicitly join a conversation group to receive real-time updates for that conversation.
+    /// </summary>
+    public async Task JoinConversation(Guid conversationId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        // Security check: Verify the user is actually a participant in this conversation
+        var isIn = await conversationService.UserIsInConversationAsync(conversationId, userId.Value);
+        if (isIn.IsSuccess && isIn.Value)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, conversationId.ToString());
+            logger.LogDebug("User {UserId} joined conversation group {ConversationId}", userId, conversationId);
+        }
+        else
+        {
+            logger.LogWarning("User {UserId} attempted to join unauthorized conversation {ConversationId}", userId, conversationId);
+        }
+    }
+
+    public async Task LeaveConversation(Guid conversationId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId.ToString());
     }
 
     public Task Heartbeat(CancellationToken ct = default)
@@ -45,7 +73,7 @@ public sealed class ChatHub(ILogger<ChatHub> logger, IPresenceService presenceSe
         var userId = GetUserId();
         return userId is null
             ? Task.CompletedTask
-            : _presenceService.UpdateLastActiveAsync(userId.Value, ct);
+            : presenceService.UpdateLastActiveAsync(userId.Value, ct);
     }
 
     private Guid? GetUserId()
