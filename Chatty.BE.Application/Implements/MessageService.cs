@@ -204,7 +204,7 @@ public class MessageService(
             unreadIds,
             ct
         );
-        
+
         return Result.Success();
     }
 }

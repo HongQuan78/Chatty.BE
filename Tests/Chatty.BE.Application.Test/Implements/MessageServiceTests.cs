@@ -212,7 +212,7 @@ public class MessageServiceTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        
+
         foreach (var messageId in unreadMessages)
         {
             _receiptRepository.Verify(
