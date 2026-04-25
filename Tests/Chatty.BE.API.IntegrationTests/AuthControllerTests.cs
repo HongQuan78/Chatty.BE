@@ -70,7 +70,7 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
         var session = await RegisterAndLoginAsync();
         var newPassword = "NewPassword123!";
 
-        var changePasswordRequest = new ChangePasswordRequest
+        var changePasswordRequest = new Chatty.BE.API.Contracts.Auth.ChangePasswordRequest
         {
             UserId = session.Login.UserId,
             CurrentPassword = session.Password,
@@ -97,13 +97,13 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
 
         var newLoginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequestDto(session.Register.Email, newPassword)
+            new LoginRequestDto { Email = session.Register.Email, Password = newPassword }
         );
         newLoginResponse.EnsureSuccessStatusCode();
 
         var oldLoginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequestDto(session.Register.Email, session.Password)
+            new LoginRequestDto { Email = session.Register.Email, Password = session.Password }
         );
         Assert.Equal(HttpStatusCode.Unauthorized, oldLoginResponse.StatusCode);
     }
@@ -212,7 +212,7 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
         Assert.NotNull(refreshedTokens);
 
         var secondLogin = await PostLoginAsync(
-            new LoginRequestDto(session.Register.Email, session.Password)
+            new LoginRequestDto { Email = session.Register.Email, Password = session.Password }
         );
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/sessions");
@@ -242,10 +242,10 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
         Assert.Equal(activeTokens, sessions.Select(s => s.TokenId).ToList());
     }
 
-    private static RegisterRequest BuildRegisterRequest(string? password = null)
+    private static Chatty.BE.API.Contracts.Auth.RegisterRequest BuildRegisterRequest(string? password = null)
     {
         var unique = Guid.NewGuid().ToString("N");
-        return new RegisterRequest
+        return new Chatty.BE.API.Contracts.Auth.RegisterRequest
         {
             UserName = $"user_{unique}",
             Email = $"user_{unique}@example.com",
@@ -258,7 +258,7 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
         var registerRequest = BuildRegisterRequest(password);
         var registerResponse = await PostRegisterAsync(registerRequest);
         var loginResponse = await PostLoginAsync(
-            new LoginRequestDto(registerRequest.Email, registerRequest.Password)
+            new LoginRequestDto { Email = registerRequest.Email, Password = registerRequest.Password }
         );
 
         return new AuthSession(
@@ -269,7 +269,7 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
         );
     }
 
-    private async Task<RegisterResponse> PostRegisterAsync(RegisterRequest request)
+    private async Task<RegisterResponse> PostRegisterAsync(Chatty.BE.API.Contracts.Auth.RegisterRequest request)
     {
         var response = await _client.PostAsJsonAsync("/api/auth/register", request);
         response.EnsureSuccessStatusCode();
@@ -284,7 +284,7 @@ public class AuthControllerTests(AuthApiFactory factory) : IClassFixture<AuthApi
     }
 
     private sealed record AuthSession(
-        RegisterRequest Register,
+        Chatty.BE.API.Contracts.Auth.RegisterRequest Register,
         RegisterResponse RegisterResponse,
         LoginResponseDto Login,
         string Password

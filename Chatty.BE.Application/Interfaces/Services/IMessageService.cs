@@ -9,11 +9,7 @@ namespace Chatty.BE.Application.Interfaces.Services;
 public interface IMessageService
 {
     Task<Result<MessageDto>> SendMessageAsync(
-        Guid conversationId,
-        Guid senderId,
-        string content,
-        MessageType type,
-        IEnumerable<MessageAttachment>? attachments,
+        SendMessageRequest request,
         CancellationToken ct = default
     );
 

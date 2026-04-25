@@ -1,3 +1,4 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Users;
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Services;
@@ -14,106 +15,117 @@ public sealed class CachedUserService(
 {
     private readonly TimeSpan _ttl = TimeSpan.FromSeconds(Math.Max(10, cacheOptions.UserCacheSeconds));
 
-    public async Task<UserDto?> GetByIdAsync(Guid userId, CancellationToken ct = default)
+    public async Task<Result<UserDto>> GetByIdAsync(Guid userId, CancellationToken ct = default)
     {
         var key = $"users:id:{userId:N}";
         var cached = await cache.GetAsync<UserDto?>(key, ct);
         if (cached is not null)
         {
-            return cached;
+            return Result<UserDto>.Success(cached);
         }
 
-        var user = await inner.GetByIdAsync(userId, ct);
-        if (user is not null)
+        var result = await inner.GetByIdAsync(userId, ct);
+        if (result.IsSuccess)
         {
-            await cache.SetAsync(key, user, _ttl, ct);
+            await cache.SetAsync(key, result.Value, _ttl, ct);
         }
 
-        return user;
+        return result;
     }
 
-    public async Task<UserDto?> GetByUserNameAsync(string userName, CancellationToken ct = default)
+    public async Task<Result<UserDto>> GetByUserNameAsync(string userName, CancellationToken ct = default)
     {
         var normalized = userName.Trim().ToLowerInvariant();
         var key = $"users:username:{normalized}";
         var cached = await cache.GetAsync<UserDto?>(key, ct);
         if (cached is not null)
         {
-            return cached;
+            return Result<UserDto>.Success(cached);
         }
 
-        var user = await inner.GetByUserNameAsync(userName, ct);
-        if (user is not null)
+        var result = await inner.GetByUserNameAsync(userName, ct);
+        if (result.IsSuccess)
         {
-            await cache.SetAsync(key, user, _ttl, ct);
-            await cache.SetAsync($"users:id:{user.Id:N}", user, _ttl, ct);
+            await cache.SetAsync(key, result.Value, _ttl, ct);
+            await cache.SetAsync($"users:id:{result.Value!.Id:N}", result.Value, _ttl, ct);
         }
 
-        return user;
+        return result;
     }
 
-    public async Task<UserDto?> GetByEmailAsync(string email, CancellationToken ct = default)
+    public async Task<Result<UserDto>> GetByEmailAsync(string email, CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
         var key = $"users:email:{normalized}";
         var cached = await cache.GetAsync<UserDto?>(key, ct);
         if (cached is not null)
         {
-            return cached;
+            return Result<UserDto>.Success(cached);
         }
 
-        var user = await inner.GetByEmailAsync(email, ct);
-        if (user is not null)
+        var result = await inner.GetByEmailAsync(email, ct);
+        if (result.IsSuccess)
         {
-            await cache.SetAsync(key, user, _ttl, ct);
-            await cache.SetAsync($"users:id:{user.Id:N}", user, _ttl, ct);
+            await cache.SetAsync(key, result.Value, _ttl, ct);
+            await cache.SetAsync($"users:id:{result.Value!.Id:N}", result.Value, _ttl, ct);
         }
 
-        return user;
+        return result;
     }
 
-    public async Task<IReadOnlyList<UserDto>> SearchUsersAsync(string keyword, CancellationToken ct = default)
+    public async Task<Result<IReadOnlyList<UserDto>>> SearchUsersAsync(
+        string keyword,
+        CancellationToken ct = default
+    )
     {
         var normalized = keyword.Trim().ToLowerInvariant();
         var key = $"users:search:{normalized}";
         var cached = await cache.GetAsync<List<UserDto>>(key, ct);
         if (cached is not null)
         {
-            return cached;
+            return Result<IReadOnlyList<UserDto>>.Success(cached);
         }
 
-        var users = await inner.SearchUsersAsync(keyword, ct);
-        await cache.SetAsync(key, users, _ttl, ct);
-        return users;
+        var result = await inner.SearchUsersAsync(keyword, ct);
+        if (result.IsSuccess)
+        {
+            await cache.SetAsync(key, result.Value, _ttl, ct);
+        }
+
+        return result;
     }
 
-    public Task<bool> IsEmailTakenAsync(string email, CancellationToken ct = default) =>
+    public Task<Result<bool>> IsEmailTakenAsync(string email, CancellationToken ct = default) =>
         inner.IsEmailTakenAsync(email, ct);
 
-    public Task<bool> IsUserNameTakenAsync(string userName, CancellationToken ct = default) =>
+    public Task<Result<bool>> IsUserNameTakenAsync(string userName, CancellationToken ct = default) =>
         inner.IsUserNameTakenAsync(userName, ct);
 
-    public async Task<UserDto> UpdateProfileAsync(
-        Guid userId,
-        string? displayName,
-        string? avatarUrl,
-        string? bio,
+    public async Task<Result<UserDto>> UpdateProfileAsync(
+        UpdateUserProfileRequest request,
         CancellationToken ct = default
     )
     {
-        var current = await inner.GetByIdAsync(userId, ct);
-        var updated = await inner.UpdateProfileAsync(userId, displayName, avatarUrl, bio, ct);
+        // Obtener el perfil actual antes de actualizar para invalidar todos los cache keys
+        var current = await inner.GetByIdAsync(request.UserId, ct);
+        var result = await inner.UpdateProfileAsync(request, ct);
 
-        await cache.RemoveAsync($"users:id:{userId:N}", ct);
-        await cache.RemoveAsync($"users:username:{updated.UserName.Trim().ToLowerInvariant()}", ct);
-        await cache.RemoveAsync($"users:email:{updated.Email.Trim().ToLowerInvariant()}", ct);
-
-        if (current is not null)
+        if (result.IsSuccess)
         {
-            await cache.RemoveAsync($"users:username:{current.UserName.Trim().ToLowerInvariant()}", ct);
-            await cache.RemoveAsync($"users:email:{current.Email.Trim().ToLowerInvariant()}", ct);
+            var updated = result.Value!;
+            await cache.RemoveAsync($"users:id:{request.UserId:N}", ct);
+            await cache.RemoveAsync($"users:username:{updated.UserName.Trim().ToLowerInvariant()}", ct);
+            await cache.RemoveAsync($"users:email:{updated.Email.Trim().ToLowerInvariant()}", ct);
+
+            // Invalidar las keys del perfil previo si los datos cambiaron
+            if (current.IsSuccess)
+            {
+                var prev = current.Value!;
+                await cache.RemoveAsync($"users:username:{prev.UserName.Trim().ToLowerInvariant()}", ct);
+                await cache.RemoveAsync($"users:email:{prev.Email.Trim().ToLowerInvariant()}", ct);
+            }
         }
 
-        return updated;
+        return result;
     }
 }

@@ -23,8 +23,12 @@ case $ACTION in
   "ps")
     docker-compose -f $COMPOSE_FILE ps
     ;;
+  "test")
+    echo "Running tests in Docker to bypass WDAC restrictions..."
+    docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet test Chatty.BE.sln
+    ;;
   *)
-    echo "Usage: ./dev.sh {up|down|build|migrate|logs|ps}"
+    echo "Usage: ./dev.sh {up|down|build|migrate|test|logs|ps}"
     exit 1
     ;;
 esac

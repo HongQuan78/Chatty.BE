@@ -1,3 +1,4 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.Interfaces.Services;
@@ -14,18 +15,21 @@ public sealed class CachedConversationService(
 {
     private readonly TimeSpan _ttl = TimeSpan.FromSeconds(Math.Max(10, cacheOptions.ConversationCacheSeconds));
 
-    public async Task<ConversationDto> CreatePrivateConversationAsync(
+    public async Task<Result<ConversationDto>> CreatePrivateConversationAsync(
         Guid userAId,
         Guid userBId,
         CancellationToken ct = default
     )
     {
-        var conversation = await inner.CreatePrivateConversationAsync(userAId, userBId, ct);
-        await InvalidateConversationReadsAsync(conversation.Id, new[] { userAId, userBId }, ct);
-        return conversation;
+        var result = await inner.CreatePrivateConversationAsync(userAId, userBId, ct);
+        if (result.IsSuccess)
+        {
+            await InvalidateConversationReadsAsync(result.Value!.Id, new[] { userAId, userBId }, ct);
+        }
+        return result;
     }
 
-    public async Task<ConversationDto> CreateGroupConversationAsync(
+    public async Task<Result<ConversationDto>> CreateGroupConversationAsync(
         Guid ownerId,
         string name,
         IEnumerable<Guid> participantIds,
@@ -33,13 +37,16 @@ public sealed class CachedConversationService(
     )
     {
         var ids = participantIds.Distinct().ToList();
-        var conversation = await inner.CreateGroupConversationAsync(ownerId, name, ids, ct);
-        ids.Add(ownerId);
-        await InvalidateConversationReadsAsync(conversation.Id, ids, ct);
-        return conversation;
+        var result = await inner.CreateGroupConversationAsync(ownerId, name, ids, ct);
+        if (result.IsSuccess)
+        {
+            ids.Add(ownerId);
+            await InvalidateConversationReadsAsync(result.Value!.Id, ids, ct);
+        }
+        return result;
     }
 
-    public async Task<IReadOnlyList<ConversationDto>> GetConversationsForUserAsync(
+    public async Task<Result<IReadOnlyList<ConversationDto>>> GetConversationsForUserAsync(
         Guid userId,
         CancellationToken ct = default
     )
@@ -48,45 +55,72 @@ public sealed class CachedConversationService(
         var cached = await cache.GetAsync<List<ConversationDto>>(key, ct);
         if (cached is not null)
         {
-            return cached;
+            return Result<IReadOnlyList<ConversationDto>>.Success(cached);
         }
 
-        var conversations = await inner.GetConversationsForUserAsync(userId, ct);
-        await cache.SetAsync(key, conversations, _ttl, ct);
-        return conversations;
+        var result = await inner.GetConversationsForUserAsync(userId, ct);
+        if (result.IsSuccess)
+        {
+            await cache.SetAsync(key, result.Value, _ttl, ct);
+        }
+        return result;
     }
 
-    public async Task<ConversationDto?> GetByIdAsync(Guid conversationId, CancellationToken ct = default)
+    public async Task<Result<ConversationDto>> GetByIdAsync(
+        Guid conversationId,
+        Guid userId,
+        CancellationToken ct = default
+    )
     {
-        var key = $"conversations:id:{conversationId:N}";
-        var cached = await cache.GetAsync<ConversationDto?>(key, ct);
+        // We cache the conversation data itself, but we still need to check if the user is a participant.
+        // For simplicity and correctness with the new Result pattern, we'll cache the success result.
+        var key = $"conversations:id:{conversationId:N}:user:{userId:N}";
+        var cached = await cache.GetAsync<ConversationDto>(key, ct);
         if (cached is not null)
         {
-            return cached;
+            return Result<ConversationDto>.Success(cached);
         }
 
-        var conversation = await inner.GetByIdAsync(conversationId, ct);
-        if (conversation is not null)
+        var result = await inner.GetByIdAsync(conversationId, userId, ct);
+        if (result.IsSuccess)
         {
-            await cache.SetAsync(key, conversation, _ttl, ct);
+            await cache.SetAsync(key, result.Value, _ttl, ct);
         }
 
-        return conversation;
+        return result;
     }
 
-    public async Task AddParticipantAsync(Guid conversationId, Guid userId, CancellationToken ct = default)
+    public async Task<Result> AddParticipantAsync(
+        Guid conversationId,
+        Guid userId,
+        Guid actorId,
+        CancellationToken ct = default
+    )
     {
-        await inner.AddParticipantAsync(conversationId, userId, ct);
-        await InvalidateConversationReadsAsync(conversationId, new[] { userId }, ct);
+        var result = await inner.AddParticipantAsync(conversationId, userId, actorId, ct);
+        if (result.IsSuccess)
+        {
+            await InvalidateConversationReadsAsync(conversationId, new[] { userId }, ct);
+        }
+        return result;
     }
 
-    public async Task RemoveParticipantAsync(Guid conversationId, Guid userId, CancellationToken ct = default)
+    public async Task<Result> RemoveParticipantAsync(
+        Guid conversationId,
+        Guid userId,
+        Guid actorId,
+        CancellationToken ct = default
+    )
     {
-        await inner.RemoveParticipantAsync(conversationId, userId, ct);
-        await InvalidateConversationReadsAsync(conversationId, new[] { userId }, ct);
+        var result = await inner.RemoveParticipantAsync(conversationId, userId, actorId, ct);
+        if (result.IsSuccess)
+        {
+            await InvalidateConversationReadsAsync(conversationId, new[] { userId }, ct);
+        }
+        return result;
     }
 
-    public async Task<bool> UserIsInConversationAsync(
+    public async Task<Result<bool>> UserIsInConversationAsync(
         Guid conversationId,
         Guid userId,
         CancellationToken ct = default
@@ -96,11 +130,14 @@ public sealed class CachedConversationService(
         var cached = await cache.GetAsync<bool?>(key, ct);
         if (cached.HasValue)
         {
-            return cached.Value;
+            return Result<bool>.Success(cached.Value);
         }
 
         var result = await inner.UserIsInConversationAsync(conversationId, userId, ct);
-        await cache.SetAsync(key, result, _ttl, ct);
+        if (result.IsSuccess)
+        {
+            await cache.SetAsync(key, result.Value, _ttl, ct);
+        }
         return result;
     }
 
@@ -110,10 +147,13 @@ public sealed class CachedConversationService(
         CancellationToken ct
     )
     {
-        await cache.RemoveAsync($"conversations:id:{conversationId:N}", ct);
-
+        // This is a bit complex now because GetByIdAsync is user-specific.
+        // We might want to use a broader invalidation strategy or just accept some stale data for GetByIdAsync.
+        // For now, we'll invalidate the specific user's GetByIdAsync cache if we know the user.
+        
         foreach (var userId in userIds.Distinct())
         {
+            await cache.RemoveAsync($"conversations:id:{conversationId:N}:user:{userId:N}", ct);
             await cache.RemoveAsync($"conversations:user:{userId:N}", ct);
             await cache.RemoveAsync($"conversations:{conversationId:N}:member:{userId:N}", ct);
         }

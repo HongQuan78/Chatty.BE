@@ -1,7 +1,8 @@
 namespace Chatty.BE.Application.DTOs.Auth;
 
-public sealed class LoginRequestDto
+public class RegisterRequest
 {
+    public string UserName { get; set; } = default!;
     public string Email { get; set; } = default!;
     public string Password { get; set; } = default!;
 }

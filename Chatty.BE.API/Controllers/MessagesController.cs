@@ -3,15 +3,15 @@ using Chatty.BE.API.Extensions;
 using Chatty.BE.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AppSendMessageRequest = Chatty.BE.Application.DTOs.Messages.SendMessageRequest;
+using Chatty.BE.Application.DTOs.MessageAttachments;
 
 namespace Chatty.BE.API.Controllers;
 
 [ApiController]
 [Route("api/conversations/{conversationId:guid}/messages")]
 [Authorize]
-public sealed class MessagesController(
-    IMessageService messageService
-) : ControllerBase
+public sealed class MessagesController(IMessageService messageService) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -26,32 +26,32 @@ public sealed class MessagesController(
     )
     {
         var currentUserId = User.GetUserId();
-        if (currentUserId != request.SenderId)
-        {
-            return Forbid();
-        }
-        if (request.SenderId != Guid.Empty && request.SenderId != currentUserId)
+        if (request.SenderId != currentUserId)
         {
             return Forbid();
         }
 
         var result = await messageService.SendMessageAsync(
-            conversationId,
-            currentUserId,
-            request.Content,
-            request.Type,
-            request.Attachments,
+            new AppSendMessageRequest
+            {
+                ConversationId = conversationId,
+                SenderId = currentUserId,
+                Content = request.Content,
+                Type = request.Type,
+                Attachments = request.Attachments?.Select(a => new CreateMessageAttachmentRequest
+                {
+                    FileName = a.FileName,
+                    FileUrl = a.FileUrl,
+                    ContentType = a.ContentType,
+                    FileSizeBytes = a.FileSizeBytes
+                }).ToList()
+            },
             ct
         );
 
-        if (!result.IsSuccess)
-        {
-            if (result.ErrorCode == "NOT_FOUND") return NotFound(new { error = result.Error });
-            if (result.ErrorCode == "FORBIDDEN") return Forbid();
-            return BadRequest(new { error = result.Error });
-        }
-
-        return CreatedAtAction(nameof(GetMessages), new { conversationId }, result.Value);
+        return result.ToActionResult(this, message =>
+            CreatedAtAction(nameof(GetMessages), new { conversationId }, message)
+        );
     }
 
     [HttpGet]
@@ -72,14 +72,7 @@ public sealed class MessagesController(
 
         var currentUserId = User.GetUserId();
         var result = await messageService.GetMessagesAsync(conversationId, currentUserId, page, pageSize, ct);
-
-        if (!result.IsSuccess)
-        {
-            if (result.ErrorCode == "FORBIDDEN") return Forbid();
-            return BadRequest(new { error = result.Error });
-        }
-
-        return Ok(result.Value);
+        return result.ToActionResult(this, messages => Ok(messages));
     }
 
     [HttpPut("read")]
@@ -90,14 +83,7 @@ public sealed class MessagesController(
     {
         var currentUserId = User.GetUserId();
         var result = await messageService.MarkConversationAsReadAsync(conversationId, currentUserId, ct);
-
-        if (!result.IsSuccess)
-        {
-            if (result.ErrorCode == "FORBIDDEN") return Forbid();
-            return BadRequest(new { error = result.Error });
-        }
-
-        return NoContent();
+        return result.ToActionResult(this);
     }
 
     [HttpGet("unread-count")]
@@ -107,18 +93,7 @@ public sealed class MessagesController(
     public async Task<IActionResult> GetUnreadCount(Guid conversationId, CancellationToken ct)
     {
         var currentUserId = User.GetUserId();
-        var result = await messageService.CountUnreadMessagesAsync(
-            conversationId,
-            currentUserId,
-            ct
-        );
-
-        if (!result.IsSuccess)
-        {
-            if (result.ErrorCode == "FORBIDDEN") return Forbid();
-            return BadRequest(new { error = result.Error });
-        }
-
-        return Ok(new GetUnreadCount { Count = result.Value });
+        var result = await messageService.CountUnreadMessagesAsync(conversationId, currentUserId, ct);
+        return result.ToActionResult(this, count => Ok(new GetUnreadCount { Count = count }));
     }
 }

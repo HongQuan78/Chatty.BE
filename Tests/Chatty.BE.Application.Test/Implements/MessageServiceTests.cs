@@ -1,9 +1,12 @@
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.DTOs.Messages;
+using Chatty.BE.Application.DTOs.MessageAttachments;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Domain.Enums;
+using FluentValidation;
+using FluentValidation.Results;
 using Moq;
 
 namespace Chatty.BE.Application.Test.Implements;
@@ -19,6 +22,7 @@ public class MessageServiceTests
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IObjectMapper> _objectMapper = new();
     private readonly Mock<IDateTimeProvider> _dateTimeProvider = new();
+    private readonly Mock<IValidator<SendMessageRequest>> _validator = new();
 
     public MessageServiceTests()
     {
@@ -39,6 +43,11 @@ public class MessageServiceTests
                 CreatedAt = m.CreatedAt,
                 UpdatedAt = m.UpdatedAt,
             });
+
+        // Default to valid
+        _validator
+            .Setup(v => v.ValidateAsync(It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ValidationResult());
     }
 
     private MessageService CreateService() =>
@@ -51,7 +60,8 @@ public class MessageServiceTests
             _notificationService.Object,
             _unitOfWork.Object,
             _objectMapper.Object,
-            _dateTimeProvider.Object
+            _dateTimeProvider.Object,
+            _validator.Object
         );
 
     [Fact]
@@ -61,9 +71,9 @@ public class MessageServiceTests
         var conversationId = Guid.NewGuid();
         var senderId = Guid.NewGuid();
         var recipientId = Guid.NewGuid();
-        var attachments = new[]
+        var attachments = new List<CreateMessageAttachmentRequest>
         {
-            new MessageAttachment
+            new()
             {
                 FileName = "file.txt",
                 FileUrl = "http://x",
@@ -91,15 +101,17 @@ public class MessageServiceTests
             );
 
         var service = CreateService();
+        var request = new SendMessageRequest
+        {
+            ConversationId = conversationId,
+            SenderId = senderId,
+            Content = "Hello",
+            Type = MessageType.Text,
+            Attachments = attachments
+        };
 
         // Act
-        var message = await service.SendMessageAsync(
-            conversationId,
-            senderId,
-            "Hello",
-            MessageType.Text,
-            attachments
-        );
+        var message = await service.SendMessageAsync(request);
 
         // Assert
         Assert.True(message.IsSuccess);
@@ -114,7 +126,7 @@ public class MessageServiceTests
             r =>
                 r.AddRangeAsync(
                     It.Is<IEnumerable<MessageAttachment>>(list =>
-                        list.Count() == attachments.Length
+                        list.Count() == attachments.Count
                     ),
                     It.IsAny<CancellationToken>()
                 ),
@@ -162,15 +174,16 @@ public class MessageServiceTests
             .ReturnsAsync(false);
 
         var service = CreateService();
+        var request = new SendMessageRequest
+        {
+            ConversationId = conversationId,
+            SenderId = senderId,
+            Content = "Hello",
+            Type = MessageType.Text
+        };
 
         // Act
-        var result = await service.SendMessageAsync(
-            conversationId,
-            senderId,
-            "Hello",
-            MessageType.Text,
-            Enumerable.Empty<MessageAttachment>()
-        );
+        var result = await service.SendMessageAsync(request);
 
         // Assert
         Assert.False(result.IsSuccess);

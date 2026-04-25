@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using Chatty.BE.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;

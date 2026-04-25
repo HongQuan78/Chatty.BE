@@ -1,5 +1,5 @@
 // Chatty.BE.API/Extensions/ClaimsPrincipalExtensions.cs
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 
 namespace Chatty.BE.API.Extensions;

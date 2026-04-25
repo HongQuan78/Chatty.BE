@@ -1,4 +1,8 @@
+using FluentValidation;
+using Chatty.BE.Application.Common;
+using AutoMapper;
 using Chatty.BE.Application.Implements;
+
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Infrastructure.Config.Caching;
@@ -24,6 +28,9 @@ public static class InfrastructureServiceRegistration
         IConfiguration configuration
     )
     {
+        // Validation
+        services.AddValidatorsFromAssembly(typeof(Result).Assembly);
+
         // DbContext
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
@@ -33,7 +40,7 @@ public static class InfrastructureServiceRegistration
         });
 
         // AutoMapper
-        services.AddAutoMapper(typeof(MappingProfile).Assembly);
+        services.AddAutoMapper(cfg => { }, typeof(MappingProfile).Assembly);
 
         // Repositories & UnitOfWork
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));

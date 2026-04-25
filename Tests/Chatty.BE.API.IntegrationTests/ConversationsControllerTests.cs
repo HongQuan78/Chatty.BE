@@ -94,7 +94,7 @@ public class ConversationsControllerTests(AuthApiFactory factory, ITestOutputHel
     {
         var unique = Guid.NewGuid().ToString("N");
         var password = "Password123!";
-        var request = new RegisterRequest
+        var request = new Chatty.BE.API.Contracts.Auth.RegisterRequest
         {
             UserName = $"user_{unique}",
             Email = $"user_{unique}@example.com",
@@ -113,7 +113,7 @@ public class ConversationsControllerTests(AuthApiFactory factory, ITestOutputHel
     {
         var response = await _client.PostAsJsonAsync(
             "/api/auth/login",
-            new LoginRequestDto(email, password)
+            new LoginRequestDto { Email = email, Password = password }
         );
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<LoginResponseDto>();

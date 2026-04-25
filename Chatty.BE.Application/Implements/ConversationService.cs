@@ -1,3 +1,4 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
@@ -11,37 +12,58 @@ public class ConversationService(
     IUserRepository userRepository,
     INotificationService notificationService,
     IUnitOfWork unitOfWork,
-    IObjectMapper objectMapper
+    IObjectMapper objectMapper,
+    IDateTimeProvider dateTimeProvider
 ) : IConversationService
 {
-    public async Task<IReadOnlyList<ConversationDto>> GetConversationsForUserAsync(
+    public async Task<Result<IReadOnlyList<ConversationDto>>> GetConversationsForUserAsync(
         Guid userId,
         CancellationToken ct = default
     )
     {
         var conversations = await conversationRepository.GetConversationsOfUserAsync(userId, ct);
-        return objectMapper.Map<List<ConversationDto>>(conversations);
+        return Result<IReadOnlyList<ConversationDto>>.Success(objectMapper.Map<List<ConversationDto>>(conversations));
     }
 
-    public async Task<ConversationDto?> GetByIdAsync(
+    public async Task<Result<ConversationDto>> GetByIdAsync(
         Guid conversationId,
+        Guid userId,
         CancellationToken ct = default
     )
     {
+        var isParticipant = await conversationRepository.UserIsInConversationAsync(
+            conversationId,
+            userId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Result<ConversationDto>.Failure("User is not a member of the conversation.", "FORBIDDEN");
+        }
+
         var conversation = await conversationRepository.GetWithParticipantsAsync(
             conversationId,
             ct
         );
-        return conversation is null ? null : objectMapper.Map<ConversationDto>(conversation);
+        if (conversation is null)
+        {
+            return Result<ConversationDto>.Failure("Conversation was not found.", "NOT_FOUND");
+        }
+
+        return Result<ConversationDto>.Success(objectMapper.Map<ConversationDto>(conversation));
     }
 
-    public Task<bool> UserIsInConversationAsync(
+    public async Task<Result<bool>> UserIsInConversationAsync(
         Guid conversationId,
         Guid userId,
         CancellationToken ct = default
-    ) => conversationRepository.UserIsInConversationAsync(conversationId, userId, ct);
+    )
+    {
+        var isIn = await conversationRepository.UserIsInConversationAsync(conversationId, userId, ct);
+        return Result<bool>.Success(isIn);
+    }
 
-    public async Task<ConversationDto> CreatePrivateConversationAsync(
+    public async Task<Result<ConversationDto>> CreatePrivateConversationAsync(
         Guid userAId,
         Guid userBId,
         CancellationToken ct = default
@@ -49,11 +71,14 @@ public class ConversationService(
     {
         if (userAId == userBId)
         {
-            throw new ArgumentException("Cannot create a private conversation with the same user.");
+            return Result<ConversationDto>.Failure("Cannot create a private conversation with the same user.", "BAD_REQUEST");
         }
 
-        await EnsureUserExistsAsync(userAId, ct);
-        await EnsureUserExistsAsync(userBId, ct);
+        var userAExists = await userRepository.ExistsAsync(userAId, ct);
+        if (!userAExists) return Result<ConversationDto>.Failure($"User {userAId} was not found.", "NOT_FOUND");
+        
+        var userBExists = await userRepository.ExistsAsync(userBId, ct);
+        if (!userBExists) return Result<ConversationDto>.Failure($"User {userBId} was not found.", "NOT_FOUND");
 
         var existing = await conversationRepository.GetPrivateConversationAsync(
             userAId,
@@ -62,10 +87,10 @@ public class ConversationService(
         );
         if (existing is not null)
         {
-            return objectMapper.Map<ConversationDto>(existing);
+            return Result<ConversationDto>.Success(objectMapper.Map<ConversationDto>(existing));
         }
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
@@ -96,19 +121,23 @@ public class ConversationService(
         await notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userAId, ct);
         await notificationService.NotifyUserJoinedConversationAsync(conversation.Id, userBId, ct);
 
-        return objectMapper.Map<ConversationDto>(conversation);
+        return Result<ConversationDto>.Success(objectMapper.Map<ConversationDto>(conversation));
     }
 
-    public async Task<ConversationDto> CreateGroupConversationAsync(
+    public async Task<Result<ConversationDto>> CreateGroupConversationAsync(
         Guid ownerId,
         string name,
         IEnumerable<Guid> participantIds,
         CancellationToken ct = default
     )
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Result<ConversationDto>.Failure("Group name is required.", "BAD_REQUEST");
+        }
 
-        await EnsureUserExistsAsync(ownerId, ct);
+        var ownerExists = await userRepository.ExistsAsync(ownerId, ct);
+        if (!ownerExists) return Result<ConversationDto>.Failure($"Owner {ownerId} was not found.", "NOT_FOUND");
 
         var distinctParticipantIds =
             participantIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? [];
@@ -119,10 +148,11 @@ public class ConversationService(
 
         foreach (var participantId in distinctParticipantIds)
         {
-            await EnsureUserExistsAsync(participantId, ct);
+            var exists = await userRepository.ExistsAsync(participantId, ct);
+            if (!exists) return Result<ConversationDto>.Failure($"Participant {participantId} was not found.", "NOT_FOUND");
         }
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
@@ -162,17 +192,26 @@ public class ConversationService(
             );
         }
 
-        return objectMapper.Map<ConversationDto>(conversation);
+        return Result<ConversationDto>.Success(objectMapper.Map<ConversationDto>(conversation));
     }
 
-    public async Task AddParticipantAsync(
+    public async Task<Result> AddParticipantAsync(
         Guid conversationId,
         Guid userId,
+        Guid actorId,
         CancellationToken ct = default
     )
     {
-        await EnsureConversationExistsAsync(conversationId, ct);
-        await EnsureUserExistsAsync(userId, ct);
+        var conversation = await conversationRepository.GetByIdAsync(conversationId, ct);
+        if (conversation is null) return Result.Failure("Conversation not found.", "NOT_FOUND");
+
+        if (conversation.IsGroup && conversation.OwnerId != actorId)
+        {
+            return Result.Failure("Only the owner can add participants to this group.", "FORBIDDEN");
+        }
+
+        var userExists = await userRepository.ExistsAsync(userId, ct);
+        if (!userExists) return Result.Failure("User not found.", "NOT_FOUND");
 
         var alreadyParticipant = await participantRepository.IsParticipantAsync(
             conversationId,
@@ -181,21 +220,30 @@ public class ConversationService(
         );
         if (alreadyParticipant)
         {
-            return;
+            return Result.Success();
         }
 
         await participantRepository.AddParticipantAsync(conversationId, userId, ct);
         await unitOfWork.SaveChangesAsync(ct);
         await notificationService.NotifyUserJoinedConversationAsync(conversationId, userId, ct);
+        return Result.Success();
     }
 
-    public async Task RemoveParticipantAsync(
+    public async Task<Result> RemoveParticipantAsync(
         Guid conversationId,
         Guid userId,
+        Guid actorId,
         CancellationToken ct = default
     )
     {
-        await EnsureConversationExistsAsync(conversationId, ct);
+        var conversation = await conversationRepository.GetByIdAsync(conversationId, ct);
+        if (conversation is null) return Result.Failure("Conversation not found.", "NOT_FOUND");
+
+        // Allow owner to remove anyone, or any user to remove themselves.
+        if (conversation.IsGroup && conversation.OwnerId != actorId && userId != actorId)
+        {
+            return Result.Failure("You don't have permission to remove this participant.", "FORBIDDEN");
+        }
 
         var isParticipant = await participantRepository.IsParticipantAsync(
             conversationId,
@@ -204,27 +252,12 @@ public class ConversationService(
         );
         if (!isParticipant)
         {
-            return;
+            return Result.Success();
         }
 
         await participantRepository.RemoveParticipantAsync(conversationId, userId, ct);
         await unitOfWork.SaveChangesAsync(ct);
         await notificationService.NotifyUserLeftConversationAsync(conversationId, userId, ct);
-    }
-
-    private async Task EnsureUserExistsAsync(Guid userId, CancellationToken ct)
-    {
-        var exists = await userRepository.ExistsAsync(userId, ct);
-        if (!exists)
-        {
-            throw new KeyNotFoundException($"User {userId} was not found.");
-        }
-    }
-
-    private async Task EnsureConversationExistsAsync(Guid conversationId, CancellationToken ct)
-    {
-        var exists =
-            await conversationRepository.GetByIdAsync(conversationId, ct)
-            ?? throw new KeyNotFoundException($"Conversation {conversationId} was not found.");
+        return Result.Success();
     }
 }

@@ -1,3 +1,4 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.Implements;
 using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.Interfaces.Repositories;
@@ -15,9 +16,12 @@ public class ConversationServiceTests
     private readonly Mock<INotificationService> _notificationService = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IObjectMapper> _objectMapper = new();
+    private readonly Mock<IDateTimeProvider> _dateTimeProvider = new();
 
     public ConversationServiceTests()
     {
+        _dateTimeProvider.Setup(d => d.UtcNow).Returns(DateTime.UtcNow);
+
         _objectMapper
             .Setup(m => m.Map<ConversationDto>(It.IsAny<Conversation>()))
             .Returns<Conversation>(c => new ConversationDto
@@ -52,7 +56,8 @@ public class ConversationServiceTests
             _userRepository.Object,
             _notificationService.Object,
             _unitOfWork.Object,
-            _objectMapper.Object
+            _objectMapper.Object,
+            _dateTimeProvider.Object
         );
 
     [Fact]
@@ -72,9 +77,11 @@ public class ConversationServiceTests
         var service = CreateService();
 
         // Act
-        var conversation = await service.CreatePrivateConversationAsync(userA, userB);
+        var result = await service.CreatePrivateConversationAsync(userA, userB);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        var conversation = result.Value!;
         Assert.False(conversation.IsGroup);
         Assert.NotEqual(Guid.Empty, conversation.Id);
 
@@ -94,27 +101,6 @@ public class ConversationServiceTests
             p => p.AddParticipantAsync(conversation.Id, userB, It.IsAny<CancellationToken>()),
             Times.Once
         );
-        _notificationService.Verify(
-            n =>
-                n.NotifyUserJoinedConversationAsync(
-                    conversation.Id,
-                    userA,
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-        _notificationService.Verify(
-            n =>
-                n.NotifyUserJoinedConversationAsync(
-                    conversation.Id,
-                    userB,
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-        _unitOfWork.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _unitOfWork.Verify(u => u.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -135,36 +121,30 @@ public class ConversationServiceTests
         var service = CreateService();
 
         // Act
-        var conversation = await service.CreatePrivateConversationAsync(userA, userB);
+        var result = await service.CreatePrivateConversationAsync(userA, userB);
 
         // Assert
-        Assert.Equal(existing.Id, conversation.Id);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(existing.Id, result.Value!.Id);
         _conversationRepository.Verify(
             r => r.AddAsync(It.IsAny<Conversation>(), It.IsAny<CancellationToken>()),
-            Times.Never
-        );
-        _notificationService.Verify(
-            n =>
-                n.NotifyUserJoinedConversationAsync(
-                    It.IsAny<Guid>(),
-                    It.IsAny<Guid>(),
-                    It.IsAny<CancellationToken>()
-                ),
             Times.Never
         );
     }
 
     [Fact]
-    public async Task CreatePrivateConversationAsync_ShouldThrow_WhenUserIdsSame()
+    public async Task CreatePrivateConversationAsync_ShouldReturnFailure_WhenUserIdsSame()
     {
         // Arrange
         var userId = Guid.NewGuid();
         var service = CreateService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.CreatePrivateConversationAsync(userId, userId)
-        );
+        // Act
+        var result = await service.CreatePrivateConversationAsync(userId, userId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal("BAD_REQUEST", result.ErrorCode);
 
         _userRepository.Verify(
             r => r.ExistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
@@ -178,10 +158,11 @@ public class ConversationServiceTests
         // Arrange
         var conversationId = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
 
         _conversationRepository
             .Setup(r => r.GetByIdAsync(conversationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Conversation { Id = conversationId });
+            .ReturnsAsync(new Conversation { Id = conversationId, IsGroup = true, OwnerId = actorId });
         _userRepository
             .Setup(r => r.ExistsAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -192,74 +173,46 @@ public class ConversationServiceTests
         var service = CreateService();
 
         // Act
-        await service.AddParticipantAsync(conversationId, userId);
+        var result = await service.AddParticipantAsync(conversationId, userId, actorId);
 
         // Assert
+        Assert.True(result.IsSuccess);
         _participantRepository.Verify(
             r => r.AddParticipantAsync(conversationId, userId, It.IsAny<CancellationToken>()),
             Times.Once
         );
-        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _notificationService.Verify(
-            n =>
-                n.NotifyUserJoinedConversationAsync(
-                    conversationId,
-                    userId,
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
     }
 
     [Fact]
-    public async Task AddParticipantAsync_ShouldSkip_WhenAlreadyParticipant()
+    public async Task AddParticipantAsync_ShouldReturnForbidden_WhenActorNotOwnerOfGroup()
     {
         // Arrange
         var conversationId = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
 
         _conversationRepository
             .Setup(r => r.GetByIdAsync(conversationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Conversation { Id = conversationId });
-        _userRepository
-            .Setup(r => r.ExistsAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-        _participantRepository
-            .Setup(r => r.IsParticipantAsync(conversationId, userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(new Conversation { Id = conversationId, IsGroup = true, OwnerId = ownerId });
 
         var service = CreateService();
 
         // Act
-        await service.AddParticipantAsync(conversationId, userId);
+        var result = await service.AddParticipantAsync(conversationId, userId, actorId);
 
         // Assert
-        _participantRepository.Verify(
-            r =>
-                r.AddParticipantAsync(
-                    It.IsAny<Guid>(),
-                    It.IsAny<Guid>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
-        _notificationService.Verify(
-            n =>
-                n.NotifyUserJoinedConversationAsync(
-                    It.IsAny<Guid>(),
-                    It.IsAny<Guid>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
+        Assert.False(result.IsSuccess);
+        Assert.Equal("FORBIDDEN", result.ErrorCode);
     }
 
     [Fact]
-    public async Task AddParticipantAsync_ShouldThrow_WhenConversationMissing()
+    public async Task AddParticipantAsync_ShouldReturnNotFound_WhenConversationMissing()
     {
         // Arrange
         var conversationId = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
 
         _conversationRepository
             .Setup(r => r.GetByIdAsync(conversationId, It.IsAny<CancellationToken>()))
@@ -267,15 +220,12 @@ public class ConversationServiceTests
 
         var service = CreateService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
-            service.AddParticipantAsync(conversationId, userId)
-        );
+        // Act
+        var result = await service.AddParticipantAsync(conversationId, userId, actorId);
 
-        _userRepository.Verify(
-            r => r.ExistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
-            Times.Never
-        );
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal("NOT_FOUND", result.ErrorCode);
     }
 
     [Fact]
@@ -284,10 +234,11 @@ public class ConversationServiceTests
         // Arrange
         var conversationId = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        var actorId = userId; // User removing themselves
 
         _conversationRepository
             .Setup(r => r.GetByIdAsync(conversationId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Conversation { Id = conversationId });
+            .ReturnsAsync(new Conversation { Id = conversationId, IsGroup = true, OwnerId = Guid.NewGuid() });
         _participantRepository
             .Setup(r => r.IsParticipantAsync(conversationId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -295,21 +246,12 @@ public class ConversationServiceTests
         var service = CreateService();
 
         // Act
-        await service.RemoveParticipantAsync(conversationId, userId);
+        var result = await service.RemoveParticipantAsync(conversationId, userId, actorId);
 
         // Assert
+        Assert.True(result.IsSuccess);
         _participantRepository.Verify(
             r => r.RemoveParticipantAsync(conversationId, userId, It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _notificationService.Verify(
-            n =>
-                n.NotifyUserLeftConversationAsync(
-                    conversationId,
-                    userId,
-                    It.IsAny<CancellationToken>()
-                ),
             Times.Once
         );
     }

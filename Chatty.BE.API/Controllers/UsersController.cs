@@ -1,6 +1,7 @@
 using Chatty.BE.API.Contracts.Users;
 using Chatty.BE.API.Extensions;
 using Chatty.BE.Application.Interfaces.Services;
+using Chatty.BE.Application.DTOs.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,12 +19,8 @@ public sealed class UsersController(IUserService userService, IPresenceService p
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
-        var user = await userService.GetByIdAsync(id, ct);
-        if (user is null)
-        {
-            return NotFound();
-        }
-        return Ok(user);
+        var result = await userService.GetByIdAsync(id, ct);
+        return result.ToActionResult(this, user => Ok(user));
     }
 
     [HttpGet("by-username/{userName}")]
@@ -32,12 +29,8 @@ public sealed class UsersController(IUserService userService, IPresenceService p
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetByUserName(string userName, CancellationToken ct)
     {
-        var user = await userService.GetByUserNameAsync(userName, ct);
-        if (user is null)
-        {
-            return NotFound();
-        }
-        return Ok(user);
+        var result = await userService.GetByUserNameAsync(userName, ct);
+        return result.ToActionResult(this, user => Ok(user));
     }
 
     [HttpGet("search")]
@@ -50,8 +43,8 @@ public sealed class UsersController(IUserService userService, IPresenceService p
             return Ok(Array.Empty<object>());
         }
 
-        var users = await userService.SearchUsersAsync(keyword, ct);
-        return Ok(users);
+        var result = await userService.SearchUsersAsync(keyword, ct);
+        return result.ToActionResult(this, users => Ok(users));
     }
 
     [HttpGet("{id:guid}/presence")]
@@ -86,14 +79,17 @@ public sealed class UsersController(IUserService userService, IPresenceService p
             return Forbid();
         }
 
-        var updated = await userService.UpdateProfileAsync(
-            id,
-            request.DisplayName,
-            request.AvatarUrl,
-            request.Bio,
+        var result = await userService.UpdateProfileAsync(
+            new UpdateUserProfileRequest
+            {
+                UserId = id,
+                DisplayName = request.DisplayName,
+                AvatarUrl = request.AvatarUrl,
+                Bio = request.Bio
+            },
             ct
         );
 
-        return Ok(updated);
+        return result.ToActionResult(this, user => Ok(user));
     }
 }

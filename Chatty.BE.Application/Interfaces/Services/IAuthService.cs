@@ -1,47 +1,44 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Auth;
-using Chatty.BE.Domain.Entities;
+using Chatty.BE.Application.DTOs.Users;
 
 namespace Chatty.BE.Application.Interfaces.Services;
 
 public interface IAuthService
 {
-    Task<User> RegisterAsync(
-        string userName,
-        string email,
-        string password,
+    Task<Result<UserDto>> RegisterAsync(
+        RegisterRequest request,
         CancellationToken ct = default
     );
 
-    Task<LoginResponseDto> LoginAsync(
+    Task<Result<LoginResponseDto>> LoginAsync(
         LoginRequestDto request,
         string ipAddress,
         CancellationToken ct = default
     );
 
-    Task<RefreshTokenResponseDto> RefreshAsync(
+    Task<Result<RefreshTokenResponseDto>> RefreshAsync(
         RefreshTokenRequestDto request,
         string ipAddress,
         CancellationToken ct = default
     );
 
-    Task LogoutAsync(
+    Task<Result> LogoutAsync(
         Guid userId,
         string refreshToken,
         string? ipAddress = null,
         CancellationToken ct = default
     );
 
-    Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(
+    Task<Result<IReadOnlyList<SessionDto>>> GetActiveSessionsAsync(
         Guid userId,
         CancellationToken ct = default
     );
 
-    Task ChangePasswordAsync(
-        Guid userId,
-        string currentPassword,
-        string newPassword,
+    Task<Result> ChangePasswordAsync(
+        ChangePasswordRequest request,
         CancellationToken ct = default
     );
 
-    Task LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct);
+    Task<Result> LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct);
 }

@@ -1,9 +1,11 @@
 using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Messages;
+using Chatty.BE.Application.Extensions;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Domain.Enums;
+using FluentValidation;
 
 namespace Chatty.BE.Application.Implements;
 
@@ -16,7 +18,8 @@ public class MessageService(
     INotificationService notificationService,
     IUnitOfWork unitOfWork,
     IObjectMapper mapper,
-    IDateTimeProvider dateTimeProvider
+    IDateTimeProvider dateTimeProvider,
+    IValidator<SendMessageRequest> validator
 ) : IMessageService
 {
     public async Task<Result<IReadOnlyList<MessageDto>>> GetMessagesAsync(
@@ -67,25 +70,25 @@ public class MessageService(
     }
 
     public async Task<Result<MessageDto>> SendMessageAsync(
-        Guid conversationId,
-        Guid senderId,
-        string content,
-        MessageType type,
-        IEnumerable<MessageAttachment>? attachments,
+        SendMessageRequest request,
         CancellationToken ct = default
     )
     {
-        ArgumentNullException.ThrowIfNull(content);
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return validationResult.ToResult<MessageDto>();
+        }
 
-        var conversation = await conversationRepository.GetByIdAsync(conversationId, ct);
+        var conversation = await conversationRepository.GetByIdAsync(request.ConversationId, ct);
         if (conversation is null)
         {
-            return Result<MessageDto>.Failure($"Conversation {conversationId} was not found.", "NOT_FOUND");
+            return Result<MessageDto>.Failure($"Conversation {request.ConversationId} was not found.", "NOT_FOUND");
         }
 
         var isParticipant = await conversationRepository.UserIsInConversationAsync(
-            conversationId,
-            senderId,
+            request.ConversationId,
+            request.SenderId,
             ct
         );
         if (!isParticipant)
@@ -97,10 +100,10 @@ public class MessageService(
         var message = new Message
         {
             Id = Guid.NewGuid(),
-            ConversationId = conversationId,
-            SenderId = senderId,
-            Content = content,
-            Type = type,
+            ConversationId = request.ConversationId,
+            SenderId = request.SenderId,
+            Content = request.Content,
+            Type = request.Type,
             Status = MessageStatus.Sent,
             CreatedAt = utcNow,
             UpdatedAt = null,
@@ -109,9 +112,9 @@ public class MessageService(
 
         await messageRepository.AddAsync(message, ct);
 
-        if (attachments is not null)
+        if (request.Attachments is not null && request.Attachments.Count > 0)
         {
-            var preparedAttachments = attachments
+            var preparedAttachments = request.Attachments
                 .Select(attachment => new MessageAttachment
                 {
                     Id = Guid.NewGuid(),
@@ -126,13 +129,10 @@ public class MessageService(
                 })
                 .ToList();
 
-            if (preparedAttachments.Count > 0)
-            {
-                await attachmentRepository.AddRangeAsync(preparedAttachments, ct);
-            }
+            await attachmentRepository.AddRangeAsync(preparedAttachments, ct);
         }
 
-        var participants = await participantRepository.GetParticipantsAsync(conversationId, ct);
+        var participants = await participantRepository.GetParticipantsAsync(request.ConversationId, ct);
         var recipientIds = participants.Select(p => p.Id).Distinct().ToList();
 
         if (recipientIds.Count > 0)

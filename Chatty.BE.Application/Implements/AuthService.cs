@@ -1,10 +1,13 @@
-using System.Net;
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.Common.Extensions;
 using Chatty.BE.Application.DTOs.Auth;
-using Chatty.BE.Application.Exceptions;
+using Chatty.BE.Application.DTOs.Users;
+using Chatty.BE.Application.Extensions;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Domain.Entities;
+using FluentValidation;
+using Microsoft.Extensions.Logging;
 
 namespace Chatty.BE.Application.Implements;
 
@@ -15,33 +18,35 @@ public class AuthService(
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
     IUnitOfWork unitOfWork,
-    IObjectMapper objectMapper
+    IObjectMapper objectMapper,
+    IValidator<RegisterRequest> registerValidator,
+    IValidator<LoginRequestDto> loginValidator,
+    IValidator<ChangePasswordRequest> changePasswordValidator,
+    ILogger<AuthService> logger
 ) : IAuthService
 {
-    private readonly IObjectMapper _mapper = objectMapper;
-
-    public async Task<User> RegisterAsync(
-        string userName,
-        string email,
-        string password,
+    public async Task<Result<UserDto>> RegisterAsync(
+        RegisterRequest request,
         CancellationToken ct = default
     )
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(email);
-        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        var validationResult = await registerValidator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return validationResult.ToResult<UserDto>();
+        }
 
-        var normalizedEmail = email.Trim().ToLowerInvariant();
-        var normalizedUserName = userName.Trim();
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedUserName = request.UserName.Trim();
 
         if (await userRepository.IsEmailTakenAsync(normalizedEmail, ct))
         {
-            throw new AppException(HttpStatusCode.Conflict, "Email is already in use.");
+            return Result<UserDto>.Failure("Email is already in use.", "CONFLICT");
         }
 
         if (await userRepository.IsUserNameTakenAsync(normalizedUserName, ct))
         {
-            throw new AppException(HttpStatusCode.Conflict, "Username is already in use.");
+            return Result<UserDto>.Failure("Username is already in use.", "CONFLICT");
         }
 
         var utcNow = dateTimeProvider.UtcNow;
@@ -50,7 +55,7 @@ public class AuthService(
             Id = Guid.NewGuid(),
             UserName = normalizedUserName,
             Email = normalizedEmail,
-            PasswordHash = passwordHasher.HashPassword(password),
+            PasswordHash = passwordHasher.HashPassword(request.Password),
             CreatedAt = utcNow,
             UpdatedAt = null,
             LastActive = utcNow,
@@ -61,27 +66,30 @@ public class AuthService(
         await userRepository.AddAsync(user, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return user;
+        logger.LogInformation("User registered successfully. UserId: {UserId}, Email: {Email}", user.Id, user.Email);
+
+        return Result<UserDto>.Success(objectMapper.Map<UserDto>(user));
     }
 
-    public async Task<LoginResponseDto> LoginAsync(
+    public async Task<Result<LoginResponseDto>> LoginAsync(
         LoginRequestDto request,
         string ipAddress,
         CancellationToken ct = default
     )
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.Password);
+        var validationResult = await loginValidator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return validationResult.ToResult<LoginResponseDto>();
+        }
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var user =
-            await userRepository.GetByEmailForUpdateAsync(normalizedEmail, ct)
-            ?? throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
+        var user = await userRepository.GetByEmailForUpdateAsync(normalizedEmail, ct);
 
-        if (!passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
+        if (user is null || !passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
-            throw new AppException(HttpStatusCode.Unauthorized, "Invalid credentials.");
+            logger.LogWarning("Failed login attempt for email {Email} from {IpAddress}", request.Email, ipAddress);
+            return Result<LoginResponseDto>.Failure("Invalid credentials.", "UNAUTHORIZED");
         }
 
         var utcNow = dateTimeProvider.UtcNow;
@@ -92,35 +100,41 @@ public class AuthService(
 
         var response = await IssueTokensAsync(user, ipAddress, ct);
         await unitOfWork.SaveChangesAsync(ct);
-        return response;
+
+        logger.LogInformation("User logged in. UserId: {UserId}, Ip: {IpAddress}", user.Id, ipAddress);
+
+        return Result<LoginResponseDto>.Success(response);
     }
 
-    public async Task<RefreshTokenResponseDto> RefreshAsync(
+    public async Task<Result<RefreshTokenResponseDto>> RefreshAsync(
         RefreshTokenRequestDto request,
         string ipAddress,
         CancellationToken ct = default
     )
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.RefreshToken);
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return Result<RefreshTokenResponseDto>.Failure("Refresh token is required.", "BAD_REQUEST");
+        }
 
         var hashedToken = tokenProvider.ComputeHash(request.RefreshToken);
-        var storedToken =
-            await refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct)
-            ?? throw new AppException(
-                HttpStatusCode.BadRequest,
-                "Refresh token is not recognized."
-            );
+        var storedToken = await refreshTokenRepository.GetByTokenHashAsync(hashedToken, ct);
+
+        if (storedToken is null)
+        {
+            return Result<RefreshTokenResponseDto>.Failure("Refresh token is not recognized.", "BAD_REQUEST");
+        }
 
         if (storedToken.RevokedAt.HasValue)
         {
+            logger.LogWarning("Security Alert: Refresh token reuse detected for UserId {UserId} from {IpAddress}", storedToken.UserId, ipAddress);
             await RevokeAllSessionsAsync(
                 storedToken.UserId,
                 "Refresh token reuse detected",
                 ipAddress,
                 ct
             );
-            throw new AppException(HttpStatusCode.BadRequest, "Refresh token has been revoked.");
+            return Result<RefreshTokenResponseDto>.Failure("Refresh token has been revoked.", "BAD_REQUEST");
         }
 
         var utcNow = dateTimeProvider.UtcNow;
@@ -131,12 +145,14 @@ public class AuthService(
             storedToken.RevokedByIp = ipAddress;
             refreshTokenRepository.Update(storedToken);
             await unitOfWork.SaveChangesAsync(ct);
-            throw new AppException(HttpStatusCode.BadRequest, "Refresh token expired.");
+            return Result<RefreshTokenResponseDto>.Failure("Refresh token expired.", "BAD_REQUEST");
         }
 
-        var user =
-            await userRepository.GetByIdAsync(storedToken.UserId, ct)
-            ?? throw new AppException(HttpStatusCode.NotFound, "User not found for refresh token.");
+        var user = await userRepository.GetByIdAsync(storedToken.UserId, ct);
+        if (user is null)
+        {
+            return Result<RefreshTokenResponseDto>.Failure("User not found for refresh token.", "NOT_FOUND");
+        }
 
         var accessToken = tokenProvider.GenerateAccessToken(user);
         var (Entity, Token) = await CreateRefreshTokenAsync(user.Id, ipAddress, ct);
@@ -149,22 +165,25 @@ public class AuthService(
         refreshTokenRepository.Update(storedToken);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return new RefreshTokenResponseDto(
+        return Result<RefreshTokenResponseDto>.Success(new RefreshTokenResponseDto(
             accessToken.Token,
             dateTimeProvider.SecondsUntil(accessToken.ExpiresAt),
             Token,
             dateTimeProvider.SecondsUntil(Entity.ExpiresAt)
-        );
+        ));
     }
 
-    public async Task LogoutAsync(
+    public async Task<Result> LogoutAsync(
         Guid userId,
         string refreshToken,
         string? ipAddress,
         CancellationToken ct = default
     )
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return Result.Failure("Refresh token is required.", "BAD_REQUEST");
+        }
 
         var utcNow = dateTimeProvider.UtcNow;
         var hashedToken = tokenProvider.ComputeHash(refreshToken);
@@ -172,12 +191,12 @@ public class AuthService(
 
         if (storedToken is null || storedToken.UserId != userId)
         {
-            return;
+            return Result.Success(); // Silent success for security
         }
 
         if (storedToken.RevokedAt is not null)
         {
-            return;
+            return Result.Success();
         }
 
         storedToken.RevokedAt = utcNow;
@@ -196,9 +215,13 @@ public class AuthService(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+
+        logger.LogInformation("User logged out. UserId: {UserId}, Ip: {IpAddress}", userId, ipAddress);
+
+        return Result.Success();
     }
 
-    public async Task<IReadOnlyList<SessionDto>> GetActiveSessionsAsync(
+    public async Task<Result<IReadOnlyList<SessionDto>>> GetActiveSessionsAsync(
         Guid userId,
         CancellationToken ct = default
     )
@@ -210,37 +233,67 @@ public class AuthService(
         );
 
         var utcNow = dateTimeProvider.UtcNow;
-        return tokens
+        var activeSessions = tokens
             .OrderByDescending(t => t.CreatedAt)
             .Where(t => t.ExpiresAt > utcNow)
-            .Select(t => _mapper.Map<SessionDto>(t))
+            .Select(t => objectMapper.Map<SessionDto>(t))
             .ToList();
+
+        return Result<IReadOnlyList<SessionDto>>.Success(activeSessions);
     }
 
-    public async Task ChangePasswordAsync(
-        Guid userId,
-        string currentPassword,
-        string newPassword,
+    public async Task<Result> ChangePasswordAsync(
+        ChangePasswordRequest request,
         CancellationToken ct = default
     )
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(currentPassword);
-        ArgumentException.ThrowIfNullOrWhiteSpace(newPassword);
-
-        var user =
-            await userRepository.GetByIdAsync(userId, ct)
-            ?? throw new KeyNotFoundException("User not found.");
-
-        if (!passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
+        var validationResult = await changePasswordValidator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            throw new AppException(HttpStatusCode.BadRequest, "Current password is incorrect.");
+            return validationResult.ToResult();
         }
 
-        user.PasswordHash = passwordHasher.HashPassword(newPassword);
+        var user = await userRepository.GetByIdAsync(request.UserId, ct);
+        if (user is null)
+        {
+            return Result.Failure("User not found.", "NOT_FOUND");
+        }
+
+        if (!passwordHasher.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+        {
+            logger.LogWarning("Failed password change attempt for UserId {UserId}. Incorrect current password.", request.UserId);
+            return Result.Failure("Current password is incorrect.", "BAD_REQUEST");
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
         user.UpdatedAt = dateTimeProvider.UtcNow;
 
         userRepository.Update(user);
         await unitOfWork.SaveChangesAsync(ct);
+
+        logger.LogInformation("Password changed successfully for UserId: {UserId}", request.UserId);
+
+        return Result.Success();
+    }
+
+    public async Task<Result> LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct)
+    {
+        var utcNow = dateTimeProvider.UtcNow;
+        await RevokeAllSessionsAsync(userId, "User logged out from all sessions", ipAddress, ct);
+
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is not null)
+        {
+            user.LatestLogout = utcNow;
+            user.LastActive = utcNow;
+            user.UpdatedAt = utcNow;
+            userRepository.Update(user);
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        logger.LogInformation("All sessions logged out for UserId: {UserId}, Ip: {IpAddress}", userId, ipAddress);
+
+        return Result.Success();
     }
 
     private async Task<LoginResponseDto> IssueTokensAsync(
@@ -315,21 +368,5 @@ public class AuthService(
 
         refreshTokenRepository.UpdateRange(tokens);
         await unitOfWork.SaveChangesAsync(ct);
-    }
-
-    public async Task LogoutAllSessionsAsync(Guid userId, string ipAddress, CancellationToken ct)
-    {
-        var utcNow = dateTimeProvider.UtcNow;
-        await RevokeAllSessionsAsync(userId, "User logged out from all sessions", ipAddress, ct);
-
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is not null)
-        {
-            user.LatestLogout = utcNow;
-            user.LastActive = utcNow;
-            user.UpdatedAt = utcNow;
-            userRepository.Update(user);
-            await unitOfWork.SaveChangesAsync(ct);
-        }
     }
 }

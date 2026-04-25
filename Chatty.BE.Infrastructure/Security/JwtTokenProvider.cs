@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,7 +11,7 @@ namespace Chatty.BE.Infrastructure.Security;
 public sealed class JwtTokenProvider(JwtOptions options, IDateTimeProvider dateTimeProvider)
     : ITokenProvider
 {
-    private static readonly JwtSecurityTokenHandler TokenHandler = new();
+    private static readonly JsonWebTokenHandler TokenHandler = new();
     private readonly JwtOptions _options =
         options ?? throw new ArgumentNullException(nameof(options));
     private readonly SigningCredentials _signingCredentials = CreateSigningCredentials(options);
@@ -23,29 +23,30 @@ public sealed class JwtTokenProvider(JwtOptions options, IDateTimeProvider dateT
         var now = dateTimeProvider.UtcNow;
         var expires = now.Add(_options.AccessTokenLifetime);
 
-        var claims = new List<Claim>
+        var claims = new Dictionary<string, object>
         {
-            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new(JwtRegisteredClaimNames.Email, user.Email),
-            new("username", user.UserName),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            [JwtRegisteredClaimNames.Sub] = user.Id.ToString(),
+            [JwtRegisteredClaimNames.Email] = user.Email,
+            ["username"] = user.UserName,
+            [JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString(),
         };
 
         if (!string.IsNullOrWhiteSpace(user.DisplayName))
         {
-            claims.Add(new Claim("displayName", user.DisplayName));
+            claims.Add("displayName", user.DisplayName);
         }
 
-        var jwt = new JwtSecurityToken(
-            issuer: _options.Issuer,
-            audience: _options.Audience,
-            claims: claims,
-            notBefore: now,
-            expires: expires,
-            signingCredentials: _signingCredentials
-        );
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = _options.Issuer,
+            Audience = _options.Audience,
+            Claims = claims,
+            NotBefore = now,
+            Expires = expires,
+            SigningCredentials = _signingCredentials,
+        };
 
-        var token = TokenHandler.WriteToken(jwt);
+        var token = TokenHandler.CreateToken(descriptor);
         return new AccessTokenResult(token, expires);
     }
 
