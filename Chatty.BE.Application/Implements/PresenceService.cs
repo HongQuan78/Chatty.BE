@@ -18,6 +18,7 @@ public class PresenceService(
 {
     private static readonly TimeSpan OnlineThreshold = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan DbUpdateInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan WarmUpThreshold = TimeSpan.FromDays(1);
 
     private static string GetCacheKey(Guid userId) => $"presence:{userId}";
 
@@ -56,7 +57,6 @@ public class PresenceService(
         }
 
         // 2. Throttled DB Update (Slow path)
-        // We only update the DB every X minutes to reduce load, or on the very first heartbeat.
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user != null)
         {
@@ -88,7 +88,6 @@ public class PresenceService(
                 var presence = JsonSerializer.Deserialize<UserPresenceDto>(cached);
                 if (presence != null)
                 {
-                    // Double check threshold in case of stale cache
                     if (utcNow - presence.LastActiveUtc <= OnlineThreshold)
                     {
                         return Result<UserPresenceDto>.Success(presence);
@@ -120,5 +119,52 @@ public class PresenceService(
         };
 
         return Result<UserPresenceDto>.Success(result);
+    }
+
+    public async Task<Result> WarmUpCacheAsync(CancellationToken ct = default)
+    {
+        logger.LogInformation("Starting presence cache warm-up");
+
+        try
+        {
+            // Fetch users who were active within the warm-up threshold (e.g., 24 hours)
+            var utcNow = dateTimeProvider.UtcNow;
+            var users = await userRepository.GetAllAsync(ct);
+            int count = 0;
+
+            foreach (var user in users)
+            {
+                var lastActive = user.LastActive ?? user.LatestLogin ?? user.CreatedAt;
+
+                if (utcNow - lastActive > WarmUpThreshold) continue;
+
+                var isOnline = (utcNow - lastActive) <= OnlineThreshold;
+                var cacheKey = GetCacheKey(user.Id);
+
+                var presenceData = new UserPresenceDto
+                {
+                    UserId = user.Id,
+                    IsOnline = isOnline,
+                    LastActiveUtc = lastActive,
+                    OfflineMinutes = isOnline ? 0 : (int)Math.Floor((utcNow - lastActive).TotalMinutes)
+                };
+
+                var options = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = OnlineThreshold * 2
+                };
+
+                await cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(presenceData), options, ct);
+                count++;
+            }
+
+            logger.LogInformation("{UserCount} users warmed up in presence cache", count);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Presence cache warm-up failed");
+            return Result.Failure("An error occurred while warming up the presence cache.");
+        }
     }
 }

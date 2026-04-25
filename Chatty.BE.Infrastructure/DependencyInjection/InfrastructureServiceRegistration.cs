@@ -108,6 +108,9 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IUserService, CachedUserService>();
         services.AddScoped<INotificationService, SignalRNotificationService>();
 
+        // Background Workers
+        services.AddHostedService<Background.PresenceWarmUpWorker>();
+
         return services;
     }
 }
