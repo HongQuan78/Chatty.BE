@@ -18,9 +18,11 @@ public class MessageServiceTests
     private readonly Mock<INotificationService> _notificationService = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IObjectMapper> _objectMapper = new();
+    private readonly Mock<IDateTimeProvider> _dateTimeProvider = new();
 
     public MessageServiceTests()
     {
+        _dateTimeProvider.Setup(d => d.UtcNow).Returns(DateTime.UtcNow);
         _objectMapper
             .Setup(m => m.Map<Message>(It.IsAny<Message>()))
             .Returns<Message>(m => m);
@@ -48,7 +50,8 @@ public class MessageServiceTests
             _participantRepository.Object,
             _notificationService.Object,
             _unitOfWork.Object,
-            _objectMapper.Object
+            _objectMapper.Object,
+            _dateTimeProvider.Object
         );
 
     [Fact]
@@ -99,11 +102,12 @@ public class MessageServiceTests
         );
 
         // Assert
-        Assert.Equal(conversationId, message.ConversationId);
-        Assert.Equal(senderId, message.SenderId);
+        Assert.True(message.IsSuccess);
+        Assert.Equal(conversationId, message.Value!.ConversationId);
+        Assert.Equal(senderId, message.Value!.SenderId);
 
         _messageRepository.Verify(
-            r => r.AddAsync(It.Is<Message>(m => m.Id == message.Id), It.IsAny<CancellationToken>()),
+            r => r.AddAsync(It.Is<Message>(m => m.Id == message.Value!.Id), It.IsAny<CancellationToken>()),
             Times.Once
         );
         _attachmentRepository.Verify(
@@ -133,7 +137,7 @@ public class MessageServiceTests
         _notificationService.Verify(
             n =>
                 n.NotifyMessageSentAsync(
-                    It.Is<Message>(m => m.Id == message.Id),
+                    It.Is<Message>(m => m.Id == message.Value!.Id),
                     It.Is<IEnumerable<Guid>>(ids => ids.OrderBy(x => x).SequenceEqual(new[] { senderId, recipientId }.OrderBy(x => x))),
                     It.IsAny<CancellationToken>()
                 ),
@@ -142,7 +146,7 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task SendMessageAsync_ShouldThrow_WhenSenderNotInConversation()
+    public async Task SendMessageAsync_ShouldReturnFailure_WhenSenderNotInConversation()
     {
         // Arrange
         var conversationId = Guid.NewGuid();
@@ -159,16 +163,18 @@ public class MessageServiceTests
 
         var service = CreateService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.SendMessageAsync(
-                conversationId,
-                senderId,
-                "Hello",
-                MessageType.Text,
-                Enumerable.Empty<MessageAttachment>()
-            )
+        // Act
+        var result = await service.SendMessageAsync(
+            conversationId,
+            senderId,
+            "Hello",
+            MessageType.Text,
+            Enumerable.Empty<MessageAttachment>()
         );
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal("FORBIDDEN", result.ErrorCode);
 
         _messageRepository.Verify(
             r => r.AddAsync(It.IsAny<Message>(), It.IsAny<CancellationToken>()),
@@ -202,9 +208,11 @@ public class MessageServiceTests
         var service = CreateService();
 
         // Act
-        await service.MarkConversationAsReadAsync(conversationId, userId);
+        var result = await service.MarkConversationAsReadAsync(conversationId, userId);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        
         foreach (var messageId in unreadMessages)
         {
             _receiptRepository.Verify(
@@ -227,7 +235,7 @@ public class MessageServiceTests
     }
 
     [Fact]
-    public async Task MarkConversationAsReadAsync_ShouldThrow_WhenUserNotParticipant()
+    public async Task MarkConversationAsReadAsync_ShouldReturnFailure_WhenUserNotParticipant()
     {
         // Arrange
         var conversationId = Guid.NewGuid();
@@ -241,10 +249,12 @@ public class MessageServiceTests
 
         var service = CreateService();
 
-        // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.MarkConversationAsReadAsync(conversationId, userId)
-        );
+        // Act
+        var result = await service.MarkConversationAsReadAsync(conversationId, userId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal("FORBIDDEN", result.ErrorCode);
 
         _receiptRepository.Verify(
             r =>

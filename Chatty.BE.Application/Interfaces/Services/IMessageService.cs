@@ -2,11 +2,13 @@ using Chatty.BE.Application.DTOs.Messages;
 using Chatty.BE.Domain.Entities;
 using Chatty.BE.Domain.Enums;
 
+using Chatty.BE.Application.Common;
+
 namespace Chatty.BE.Application.Interfaces.Services;
 
 public interface IMessageService
 {
-    Task<MessageDto> SendMessageAsync(
+    Task<Result<MessageDto>> SendMessageAsync(
         Guid conversationId,
         Guid senderId,
         string content,
@@ -15,20 +17,21 @@ public interface IMessageService
         CancellationToken ct = default
     );
 
-    Task<IReadOnlyList<MessageDto>> GetMessagesAsync(
+    Task<Result<IReadOnlyList<MessageDto>>> GetMessagesAsync(
         Guid conversationId,
+        Guid userId,
         int page,
         int pageSize,
         CancellationToken ct = default
     );
 
-    Task MarkConversationAsReadAsync(
+    Task<Result> MarkConversationAsReadAsync(
         Guid conversationId,
         Guid readerUserId,
         CancellationToken ct = default
     );
 
-    Task<int> CountUnreadMessagesAsync(
+    Task<Result<int>> CountUnreadMessagesAsync(
         Guid conversationId,
         Guid userId,
         CancellationToken ct = default

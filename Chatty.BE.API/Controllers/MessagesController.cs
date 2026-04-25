@@ -10,8 +10,7 @@ namespace Chatty.BE.API.Controllers;
 [Route("api/conversations/{conversationId:guid}/messages")]
 [Authorize]
 public sealed class MessagesController(
-    IMessageService messageService,
-    IConversationService conversationService
+    IMessageService messageService
 ) : ControllerBase
 {
     [HttpPost]
@@ -19,6 +18,7 @@ public sealed class MessagesController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SendMessage(
         Guid conversationId,
         [FromBody] SendMessageRequest request,
@@ -35,17 +35,7 @@ public sealed class MessagesController(
             return Forbid();
         }
 
-        var isParticipant = await conversationService.UserIsInConversationAsync(
-            conversationId,
-            currentUserId,
-            ct
-        );
-        if (!isParticipant)
-        {
-            return Forbid();
-        }
-
-        var message = await messageService.SendMessageAsync(
+        var result = await messageService.SendMessageAsync(
             conversationId,
             currentUserId,
             request.Content,
@@ -54,12 +44,20 @@ public sealed class MessagesController(
             ct
         );
 
-        return CreatedAtAction(nameof(GetMessages), new { conversationId }, message);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == "NOT_FOUND") return NotFound(new { error = result.Error });
+            if (result.ErrorCode == "FORBIDDEN") return Forbid();
+            return BadRequest(new { error = result.Error });
+        }
+
+        return CreatedAtAction(nameof(GetMessages), new { conversationId }, result.Value);
     }
 
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMessages(
         Guid conversationId,
         [FromQuery] int page = 1,
@@ -73,61 +71,54 @@ public sealed class MessagesController(
         }
 
         var currentUserId = User.GetUserId();
-        var isParticipant = await conversationService.UserIsInConversationAsync(
-            conversationId,
-            currentUserId,
-            ct
-        );
-        if (!isParticipant)
+        var result = await messageService.GetMessagesAsync(conversationId, currentUserId, page, pageSize, ct);
+
+        if (!result.IsSuccess)
         {
-            return Forbid();
+            if (result.ErrorCode == "FORBIDDEN") return Forbid();
+            return BadRequest(new { error = result.Error });
         }
 
-        var messages = await messageService.GetMessagesAsync(conversationId, page, pageSize, ct);
-        return Ok(messages);
+        return Ok(result.Value);
     }
 
     [HttpPut("read")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> MarkAsRead(Guid conversationId, CancellationToken ct)
     {
         var currentUserId = User.GetUserId();
-        var isParticipant = await conversationService.UserIsInConversationAsync(
-            conversationId,
-            currentUserId,
-            ct
-        );
-        if (!isParticipant)
+        var result = await messageService.MarkConversationAsReadAsync(conversationId, currentUserId, ct);
+
+        if (!result.IsSuccess)
         {
-            return Forbid();
+            if (result.ErrorCode == "FORBIDDEN") return Forbid();
+            return BadRequest(new { error = result.Error });
         }
 
-        await messageService.MarkConversationAsReadAsync(conversationId, currentUserId, ct);
         return NoContent();
     }
 
     [HttpGet("unread-count")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetUnreadCount(Guid conversationId, CancellationToken ct)
     {
         var currentUserId = User.GetUserId();
-        var isParticipant = await conversationService.UserIsInConversationAsync(
+        var result = await messageService.CountUnreadMessagesAsync(
             conversationId,
             currentUserId,
             ct
         );
-        if (!isParticipant)
+
+        if (!result.IsSuccess)
         {
-            return Forbid();
+            if (result.ErrorCode == "FORBIDDEN") return Forbid();
+            return BadRequest(new { error = result.Error });
         }
 
-        var count = await messageService.CountUnreadMessagesAsync(
-            conversationId,
-            currentUserId,
-            ct
-        );
-        return Ok(new GetUnreadCount { Count = count });
+        return Ok(new GetUnreadCount { Count = result.Value });
     }
 }

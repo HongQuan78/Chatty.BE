@@ -1,3 +1,4 @@
+using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Messages;
 using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
@@ -14,32 +15,58 @@ public class MessageService(
     IConversationParticipantRepository participantRepository,
     INotificationService notificationService,
     IUnitOfWork unitOfWork,
-    IObjectMapper mapper
+    IObjectMapper mapper,
+    IDateTimeProvider dateTimeProvider
 ) : IMessageService
 {
-    public async Task<IReadOnlyList<MessageDto>> GetMessagesAsync(
+    public async Task<Result<IReadOnlyList<MessageDto>>> GetMessagesAsync(
         Guid conversationId,
+        Guid userId,
         int page,
         int pageSize,
         CancellationToken ct = default
     )
     {
+        var isParticipant = await conversationRepository.UserIsInConversationAsync(
+            conversationId,
+            userId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Result<IReadOnlyList<MessageDto>>.Failure("User is not a member of the conversation.", "FORBIDDEN");
+        }
+
         var messageList = await messageRepository.GetMessagesAsync(
             conversationId,
             page,
             pageSize,
             ct
         );
-        return mapper.Map<IReadOnlyList<MessageDto>>(messageList);
+        return Result<IReadOnlyList<MessageDto>>.Success(mapper.Map<IReadOnlyList<MessageDto>>(messageList));
     }
 
-    public Task<int> CountUnreadMessagesAsync(
+    public async Task<Result<int>> CountUnreadMessagesAsync(
         Guid conversationId,
         Guid userId,
         CancellationToken ct = default
-    ) => messageRepository.CountUnreadMessagesAsync(conversationId, userId, ct);
+    )
+    {
+        var isParticipant = await conversationRepository.UserIsInConversationAsync(
+            conversationId,
+            userId,
+            ct
+        );
+        if (!isParticipant)
+        {
+            return Result<int>.Failure("User is not a member of the conversation.", "FORBIDDEN");
+        }
 
-    public async Task<MessageDto> SendMessageAsync(
+        var count = await messageRepository.CountUnreadMessagesAsync(conversationId, userId, ct);
+        return Result<int>.Success(count);
+    }
+
+    public async Task<Result<MessageDto>> SendMessageAsync(
         Guid conversationId,
         Guid senderId,
         string content,
@@ -50,9 +77,11 @@ public class MessageService(
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var conversation =
-            await conversationRepository.GetByIdAsync(conversationId, ct)
-            ?? throw new KeyNotFoundException($"Conversation {conversationId} was not found.");
+        var conversation = await conversationRepository.GetByIdAsync(conversationId, ct);
+        if (conversation is null)
+        {
+            return Result<MessageDto>.Failure($"Conversation {conversationId} was not found.", "NOT_FOUND");
+        }
 
         var isParticipant = await conversationRepository.UserIsInConversationAsync(
             conversationId,
@@ -61,10 +90,10 @@ public class MessageService(
         );
         if (!isParticipant)
         {
-            throw new InvalidOperationException("Sender is not a member of the conversation.");
+            return Result<MessageDto>.Failure("Sender is not a member of the conversation.", "FORBIDDEN");
         }
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = dateTimeProvider.UtcNow;
         var message = new Message
         {
             Id = Guid.NewGuid(),
@@ -104,7 +133,6 @@ public class MessageService(
         }
 
         var participants = await participantRepository.GetParticipantsAsync(conversationId, ct);
-        // Notify all participants (including sender) so multiple sessions for the same user also update in real-time.
         var recipientIds = participants.Select(p => p.Id).Distinct().ToList();
 
         if (recipientIds.Count > 0)
@@ -135,10 +163,10 @@ public class MessageService(
             await notificationService.NotifyMessageSentAsync(message, recipientIds, ct);
         }
 
-        return mapper.Map<MessageDto>(message);
+        return Result<MessageDto>.Success(mapper.Map<MessageDto>(message));
     }
 
-    public async Task MarkConversationAsReadAsync(
+    public async Task<Result> MarkConversationAsReadAsync(
         Guid conversationId,
         Guid readerUserId,
         CancellationToken ct = default
@@ -151,7 +179,7 @@ public class MessageService(
         );
         if (!isParticipant)
         {
-            throw new InvalidOperationException("User does not belong to the conversation.");
+            return Result.Failure("User does not belong to the conversation.", "FORBIDDEN");
         }
 
         var unreadIds = await receiptRepository.GetUnreadMessageIdsForUserAsync(
@@ -161,7 +189,7 @@ public class MessageService(
         );
         if (unreadIds.Count == 0)
         {
-            return;
+            return Result.Success();
         }
 
         foreach (var messageId in unreadIds)
@@ -176,5 +204,7 @@ public class MessageService(
             unreadIds,
             ct
         );
+        
+        return Result.Success();
     }
 }
