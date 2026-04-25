@@ -53,13 +53,8 @@ public sealed class UsersController(IUserService userService, IPresenceService p
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPresence(Guid id, CancellationToken ct)
     {
-        var presence = await presenceService.GetPresenceAsync(id, ct);
-        if (presence is null)
-        {
-            return NotFound();
-        }
-
-        return Ok(presence);
+        var result = await presenceService.GetPresenceAsync(id, ct);
+        return result.ToActionResult(this, presence => Ok(presence));
     }
 
     [HttpPut("{id:guid}")]
