@@ -1,6 +1,7 @@
 using Chatty.BE.Application.Common;
 using Chatty.BE.Application.DTOs.Conversations;
 using Chatty.BE.Application.Implements;
+using Chatty.BE.Application.Interfaces.Repositories;
 using Chatty.BE.Application.Interfaces.Services;
 using Chatty.BE.Infrastructure.Config.Caching;
 using Microsoft.Extensions.Caching.Distributed;
@@ -10,7 +11,8 @@ namespace Chatty.BE.Infrastructure.Services.Caching;
 public sealed class CachedConversationService(
     ConversationService inner,
     IDistributedCache cache,
-    RedisCacheOptions cacheOptions
+    RedisCacheOptions cacheOptions,
+    IConversationParticipantRepository participantRepository
 ) : IConversationService
 {
     private readonly TimeSpan _ttl = TimeSpan.FromSeconds(Math.Max(10, cacheOptions.ConversationCacheSeconds));
@@ -100,7 +102,11 @@ public sealed class CachedConversationService(
         var result = await inner.AddParticipantAsync(conversationId, userId, actorId, ct);
         if (result.IsSuccess)
         {
-            await InvalidateConversationReadsAsync(conversationId, new[] { userId }, ct);
+            var affectedUserIds = await GetParticipantIdsAsync(conversationId, ct);
+            affectedUserIds.Add(userId);
+            affectedUserIds.Add(actorId);
+
+            await InvalidateConversationReadsAsync(conversationId, affectedUserIds, ct);
         }
         return result;
     }
@@ -112,10 +118,14 @@ public sealed class CachedConversationService(
         CancellationToken ct = default
     )
     {
+        var affectedUserIds = await GetParticipantIdsAsync(conversationId, ct);
+        affectedUserIds.Add(userId);
+        affectedUserIds.Add(actorId);
+
         var result = await inner.RemoveParticipantAsync(conversationId, userId, actorId, ct);
         if (result.IsSuccess)
         {
-            await InvalidateConversationReadsAsync(conversationId, new[] { userId }, ct);
+            await InvalidateConversationReadsAsync(conversationId, affectedUserIds, ct);
         }
         return result;
     }
@@ -147,15 +157,20 @@ public sealed class CachedConversationService(
         CancellationToken ct
     )
     {
-        // This is a bit complex now because GetByIdAsync is user-specific.
-        // We might want to use a broader invalidation strategy or just accept some stale data for GetByIdAsync.
-        // For now, we'll invalidate the specific user's GetByIdAsync cache if we know the user.
-
         foreach (var userId in userIds.Distinct())
         {
             await cache.RemoveAsync($"conversations:id:{conversationId:N}:user:{userId:N}", ct);
             await cache.RemoveAsync($"conversations:user:{userId:N}", ct);
             await cache.RemoveAsync($"conversations:{conversationId:N}:member:{userId:N}", ct);
         }
+    }
+
+    private async Task<HashSet<Guid>> GetParticipantIdsAsync(
+        Guid conversationId,
+        CancellationToken ct
+    )
+    {
+        var participants = await participantRepository.GetParticipantsAsync(conversationId, ct);
+        return participants.Select(participant => participant.Id).ToHashSet();
     }
 }
