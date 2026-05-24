@@ -25,7 +25,7 @@ public sealed class CachedMessageService(
         var result = await inner.SendMessageAsync(request, ct);
         if (result.IsSuccess)
         {
-            await cache.RemoveAsync($"messages:{request.ConversationId:N}:page:1:size:50", ct);
+            await BumpMessageListVersionAsync(request.ConversationId, ct);
         }
         return result;
     }
@@ -40,7 +40,8 @@ public sealed class CachedMessageService(
     {
         // Se delega siempre al inner para que valide la pertenencia del usuario.
         // Solo se cachea el resultado exitoso por usuario para evitar filtrar datos no autorizados.
-        var key = $"messages:{conversationId:N}:user:{userId:N}:page:{page}:size:{pageSize}";
+        var version = await GetMessageListVersionAsync(conversationId, ct);
+        var key = $"messages:{conversationId:N}:v:{version}:user:{userId:N}:page:{page}:size:{pageSize}";
         var cached = await cache.GetAsync<List<MessageDto>>(key, ct);
         if (cached is not null)
         {
@@ -89,4 +90,19 @@ public sealed class CachedMessageService(
         }
         return result;
     }
+
+    private async Task<string> GetMessageListVersionAsync(Guid conversationId, CancellationToken ct)
+    {
+        return await cache.GetAsync<string>(GetMessageListVersionKey(conversationId), ct)
+            ?? "initial";
+    }
+
+    private Task BumpMessageListVersionAsync(Guid conversationId, CancellationToken ct)
+    {
+        var version = Guid.NewGuid().ToString("N");
+        return cache.SetAsync(GetMessageListVersionKey(conversationId), version, _ttl + _ttl, ct);
+    }
+
+    private static string GetMessageListVersionKey(Guid conversationId) =>
+        $"messages:{conversationId:N}:version";
 }
